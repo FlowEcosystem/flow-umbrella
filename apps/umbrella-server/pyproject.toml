@@ -1,0 +1,102 @@
+[project]
+name = "umbrella-server"
+version = "0.1.0"
+description = "Umbrella central server — endpoint management API"
+authors = [
+    {name = "k1rson", email = "vlad2k15@bk.ru"},
+]
+requires-python = "==3.13.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+
+    "cryptography>=44.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+
+    "structlog>=24.4.0",
+    "prometheus-client>=0.21.0",
+
+    "httpx>=0.28.0",
+    "dishka>=1.9.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "asgi-lifespan>=2.1.0",
+]
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.scripts]
+dev = {cmd = "uvicorn umbrella_server.main:app --host 0.0.0.0 --port 8090 --reload --proxy-headers --forwarded-allow-ips=*", env = {PYTHONPATH = "src"}}
+test = "pytest"
+lint = "ruff check src tests"
+fmt = "ruff format src tests"
+typecheck = "mypy src"
+migrate = "alembic upgrade head"
+migration = "alembic revision --autogenerate -m"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",      # pycodestyle + pyflakes
+    "I",                # isort
+    "N",                # pep8-naming
+    "UP",               # pyupgrade
+    "B",                # bugbear
+    "C4",               # comprehensions
+    "SIM",              # simplify
+    "RUF",              # ruff-specific
+    "ASYNC",            # async antipatterns
+]
+ignore = ["E501"]       # line length — handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"migrations/*" = ["E", "F", "N"]
+"tests/*" = ["N802", "N803"]  # snake_case в именах тестов разрешаем
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "unit: unit tests (no DB, no HTTP)",
+    "integration: integration tests (with DB)",
+    "e2e: end-to-end tests (full stack)",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/"]
+
+[tool.coverage.run]
+source = ["src/umbrella_server"]
+omit = ["*/migrations/*", "*/tests/*"]
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"

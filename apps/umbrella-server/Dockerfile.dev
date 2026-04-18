@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.9
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PDM_CHECK_UPDATE=false
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    apt-get update && apt-get install -y --no-install-recommends \
+        build-essential libpq-dev curl \
+    && pip install --no-cache-dir pdm
+
+WORKDIR /app
+
+COPY pyproject.toml pdm.lock* ./
+
+# Общий пакет
+COPY --from=protocol . ./packages/umbrella-protocol
+
+RUN --mount=type=cache,target=/root/.cache/pdm \
+    --mount=type=cache,target=/root/.cache/pip \
+    pdm config install.parallel false && \
+    pdm install --dev --no-editable --no-self
+
+COPY src ./src
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app/src"
+
+EXPOSE 8000
+
+CMD ["uvicorn", "umbrella_server.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--proxy-headers", "--forwarded-allow-ips=*"]

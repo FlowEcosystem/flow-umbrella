@@ -1,0 +1,40 @@
+name: umbrella
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ../../apps/umbrella-server
+      dockerfile: Dockerfile.dev
+      additional_contexts:
+        protocol: ../../packages/umbrella-protocol
+    restart: unless-stopped
+    ports:
+      - "9090:8000"
+    env_file:
+      - ../../apps/umbrella-server/.env
+    volumes:
+      - ../../apps/umbrella-server/src:/app/src
+      - ../../apps/umbrella-server/alembic:/app/alembic
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
