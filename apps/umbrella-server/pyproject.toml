@@ -46,7 +46,7 @@ dev = [
 distribution = true
 
 [tool.pdm.scripts]
-dev = {cmd = "uvicorn umbrella_server.main:app --host 0.0.0.0 --port 8090 --reload --proxy-headers --forwarded-allow-ips=*", env = {PYTHONPATH = "src"}}
+dev = {cmd = "uvicorn umbrella_server.main:app --host 0.0.0.0 --port 9090 --reload --proxy-headers --forwarded-allow-ips=*", env = {PYTHONPATH = "src"}}
 test = "pytest"
 lint = "ruff check src tests"
 fmt = "ruff format src tests"
