@@ -6,7 +6,6 @@ authors = [
     {name = "k1rson", email = "vlad2k15@bk.ru"},
 ]
 requires-python = "==3.13.*"
-readme = "README.md"
 license = {text = "MIT"}
 
 dependencies = [
@@ -30,6 +29,7 @@ dependencies = [
 
     "httpx>=0.28.0",
     "dishka>=1.9.1",
+    "rich>=15.0.0",
 ]
 
 [dependency-groups]
@@ -43,7 +43,7 @@ dev = [
 ]
 
 [tool.pdm]
-distribution = false
+distribution = true
 
 [tool.pdm.scripts]
 dev = {cmd = "uvicorn umbrella_server.main:app --host 0.0.0.0 --port 8090 --reload --proxy-headers --forwarded-allow-ips=*", env = {PYTHONPATH = "src"}}
@@ -100,3 +100,7 @@ omit = ["*/migrations/*", "*/tests/*"]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+[tool.pdm.build]
+package-dir = "src"
+includes = ["src/umbrella_server"]

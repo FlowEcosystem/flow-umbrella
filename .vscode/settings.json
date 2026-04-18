@@ -3,9 +3,10 @@
       "**/__pycache__": true,
       "**/.pdm-python": true,
       "**/pdm.lock": true,
-      "**/.venv": true,
       "**/.pytest_cache": true,
       "**/.ruff_cache": true,
+      "**/.pdm-build": true,
+      "**/.python-version": true,
     },
     "search.exclude": {
       "**/__pycache__": true,
