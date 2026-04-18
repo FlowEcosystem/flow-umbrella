@@ -32,6 +32,7 @@ services:
     volumes:
       - ../../apps/umbrella-server/src:/app/src
       - ../../apps/umbrella-server/alembic:/app/alembic
+      - ../../apps/umbrella-server/alembic.ini:/app/alembic.ini
     depends_on:
       postgres:
         condition: service_healthy
