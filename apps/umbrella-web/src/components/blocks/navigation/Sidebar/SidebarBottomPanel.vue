@@ -1,45 +1,26 @@
 <script setup>
-import router from '@/plugins/router'
+const props = defineProps({
+  collapsed: { type: Boolean, default: false },
+})
 
-const authStore = useAuthStore()
-const logoutModal = ref(null)
-
-function openLogout() {
-  logoutModal.value?.open()
-}
-
-async function doLogout() {
-  await authStore.logout()
-  router.push('/')
-}
+const appVersion = import.meta.env.VITE_APP_VERSION ?? '1.0.0'
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-1">
-    <UiRouteButton to="/settings" tooltip="Настройки">
-      <Settings class="size-5" />
-    </UiRouteButton>
-
-    <div class="tooltip tooltip-right" data-tip="Выйти">
-      <button
-        class="btn btn-ghost btn-square rounded-2xl"
-        :disabled="!authStore.isAuthenticated"
-        @click="openLogout"
-      >
-        <SquareArrowRightExit class="size-5" />
-      </button>
+  <div class="sidebar-bottom-panel">
+    <div
+      v-if="props.collapsed"
+      class="sidebar-bottom-icon"
+      v-tooltip.right="`Консоль Umbrella v${appVersion}`"
+      aria-hidden="true"
+    >
+      <Shield class="icon-md" />
     </div>
 
-    <UiConfirmModal
-      ref="logoutModal"
-      title="Выйти из системы?"
-      icon="SquareArrowRightExit"
-      message="Сессия будет завершена. Чтобы продолжить работу, потребуется войти снова."
-      confirm-text="Выйти"
-      cancel-text="Отмена"
-      confirm-variant="error"
-      busy-text="Выходим…"
-      @confirm="doLogout"
-    />
+    <div v-else class="sidebar-version">
+      <span class="sidebar-version-label">Рабочая среда</span>
+      <span class="sidebar-version-title">Консоль Umbrella</span>
+      <span class="sidebar-version-value">v{{ appVersion }}</span>
+    </div>
   </div>
 </template>

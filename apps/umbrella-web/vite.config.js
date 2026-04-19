@@ -3,11 +3,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
-
-// tailwind
-import tailwindcss from '@tailwindcss/vite'
-
-// auto-imports
+import { PrimeVueResolver } from '@primevue/auto-import-resolver'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 
@@ -15,7 +11,6 @@ export default defineConfig({
   plugins: [
     vue(),
     vueDevTools(),
-    tailwindcss(),
     AutoImport({
       imports: ['vue', 'vue-router', 'pinia'],
       dirs: ['src/composables', 'src/stores', 'src/utils'],
@@ -25,6 +20,7 @@ export default defineConfig({
       dirs: ['src/components'],
       dts: 'src/components.d.ts',
       deep: true,
+      resolvers: [PrimeVueResolver()],
     }),
   ],
   resolve: {
@@ -33,15 +29,14 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0',
-    port: 1050,
+    host: '127.0.0.1',
+    port: 9080,
     strictPort: true,
-    allowedHosts: ['.termlog.ru'],
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-      },
+    allowedHosts: ['app.umbrella.su'],
+    hmr: {
+      host: 'app.umbrella.su',
+      protocol: 'wss',
+      clientPort: 443,
     },
   },
 })

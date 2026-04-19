@@ -1,136 +1,98 @@
-import { sessionApi } from '@/api/session.api'
-import { getRoleLabel, getRolePermissions, hasPermission, hasSomeRole, resolveRole } from '@/config/rbac'
-
-function normalizeSession(payload) {
-  if (!payload?.user) {
-    return null
-  }
-
-  const role = resolveRole(payload.user.role ?? payload.role)
-
-  if (!role) {
-    return null
-  }
-
-  const fullName =
-    payload.user.fullName ||
-    [payload.user.lastName, payload.user.firstName].filter(Boolean).join(' ')
-
-  return {
-    user: {
-      id: payload.user.id ?? null,
-      firstName: payload.user.firstName ?? '',
-      lastName: payload.user.lastName ?? '',
-      fullName: fullName || payload.user.email || 'Пользователь',
-      email: payload.user.email ?? '',
-      avatarUrl: payload.user.avatarUrl ?? '',
-      branchName: payload.user.branchName ?? '',
-      groupName: payload.user.groupName ?? '',
-    },
-    role,
-    permissions: [...new Set([...(payload.permissions ?? []), ...getRolePermissions(role)])],
-  }
-}
+import { authApi } from '@/api/auth.api'
+import { setAccessToken } from '@/api/http'
 
 export const useAuthStore = defineStore('auth', () => {
+  const accessToken = ref(null)
+  const currentUser = ref(null)
+  const isLoading = ref(false)
+  const error = ref(null)
   const ready = ref(false)
-  const loading = ref(false)
-  const error = ref('')
-  const session = ref(null)
-  const bootstrapPromise = ref(null)
+  let initializationPromise = null
 
-  const user = computed(() => session.value?.user ?? null)
-  const role = computed(() => session.value?.role ?? null)
-  const permissions = computed(() => session.value?.permissions ?? [])
-  const isAuthenticated = computed(() => Boolean(user.value && role.value))
-  const roleLabel = computed(() => getRoleLabel(role.value))
-  const displayName = computed(() => user.value?.fullName ?? 'Гость')
+  const isAuthenticated = computed(() => Boolean(accessToken.value && currentUser.value))
 
-  function applySession(payload) {
-    session.value = normalizeSession(payload)
+  function hasRole(roles = []) {
+    if (!currentUser.value) return false
+    if (!roles.length) return true
+    const list = Array.isArray(roles) ? roles : [roles]
+    return list.includes(currentUser.value.role)
   }
 
-  function clearSession() {
-    session.value = null
+  async function fetchMe() {
+    const data = await authApi.me()
+    currentUser.value = data
   }
 
-  async function bootstrap(force = false) {
-    if (loading.value && bootstrapPromise.value) {
-      return bootstrapPromise.value
+  async function login(email, password) {
+    isLoading.value = true
+    error.value = null
+    try {
+      const data = await authApi.login({ email, password })
+      accessToken.value = data.access_token
+      setAccessToken(data.access_token)
+      await fetchMe()
+    } catch (err) {
+      error.value = err.message ?? 'Login failed'
+      throw err
+    } finally {
+      isLoading.value = false
     }
-
-    if (ready.value && !force) {
-      return session.value
-    }
-
-    loading.value = true
-    error.value = ''
-
-    const request = sessionApi
-      .fetchCurrentSession()
-      .then((payload) => {
-        applySession(payload)
-        return session.value
-      })
-      .catch((err) => {
-        clearSession()
-        error.value = err?.message ?? 'Не удалось загрузить сессию'
-        return null
-      })
-      .finally(() => {
-        loading.value = false
-        ready.value = true
-        bootstrapPromise.value = null
-      })
-
-    bootstrapPromise.value = request
-    return request
-  }
-
-  async function ensureInitialized() {
-    if (ready.value) {
-      return session.value
-    }
-
-    return bootstrap()
   }
 
   async function logout() {
     try {
-      await sessionApi.logout()
+      await authApi.logout()
     } catch {
-      // Сессию очищаем локально даже если backend недоступен.
+      // clear locally even if backend is unreachable
     } finally {
-      clearSession()
-      ready.value = true
+      accessToken.value = null
+      currentUser.value = null
+      setAccessToken(null)
     }
   }
 
-  function hasRole(roles = []) {
-    return hasSomeRole(role.value, roles)
+  async function refresh() {
+    if (initializationPromise) return initializationPromise
+
+    initializationPromise = (async () => {
+      try {
+        const data = await authApi.refresh()
+        accessToken.value = data.access_token
+        setAccessToken(data.access_token)
+        await fetchMe()
+      } catch {
+        accessToken.value = null
+        currentUser.value = null
+      } finally {
+        ready.value = true
+        initializationPromise = null
+      }
+    })()
+
+    try {
+      await initializationPromise
+    } catch {
+      // refresh handles state cleanup internally
+    }
   }
 
-  function can(permission) {
-    return hasPermission(role.value, permission, permissions.value)
+  async function ensureInitialized() {
+    if (ready.value) return
+    await refresh()
   }
 
   return {
-    ready,
-    loading,
+    accessToken,
+    currentUser,
+    isLoading,
     error,
-    session,
-    user,
-    role,
-    permissions,
+    ready,
     isAuthenticated,
-    roleLabel,
-    displayName,
-    applySession,
-    clearSession,
-    bootstrap,
-    ensureInitialized,
-    logout,
     hasRole,
-    can,
+    login,
+    logout,
+    fetchMe,
+    refresh,
+    ensureInitialized,
   }
 })

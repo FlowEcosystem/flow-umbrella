@@ -1,0 +1,50 @@
+.app-layout {
+  display: flex;
+  min-height: 100dvh;
+  height: 100dvh;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+  padding: var(--layout-content-padding-y) var(--layout-content-padding-x);
+  background: var(--color-bg);
+  overflow-y: auto;
+}
+
+.app-page-shell {
+  width: 100%;
+  max-width: var(--layout-content-max-width);
+  min-height: 100%;
+  margin: 0 auto;
+}
+
+.app-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  background: var(--color-shell-mask);
+}
+
+@media (max-width: 1023px) {
+  .app-content {
+    padding: 28px 20px;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-content {
+    padding: 16px;
+  }
+}

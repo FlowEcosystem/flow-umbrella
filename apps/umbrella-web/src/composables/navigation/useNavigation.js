@@ -4,8 +4,9 @@ import { useAuthStore } from '@/stores/auth.store'
 export function useNavigation() {
   const authStore = useAuthStore()
 
-  const sections = computed(() => getAccessibleNavigation(authStore.role))
-  const quickActions = computed(() => getQuickActions(authStore.role))
+  const role = computed(() => authStore.currentUser?.role ?? null)
+  const sections = computed(() => getAccessibleNavigation(role.value))
+  const quickActions = computed(() => getQuickActions(role.value))
 
   return {
     sections,

@@ -1,18 +1,24 @@
+<script setup>
+defineProps({
+  collapsed: { type: Boolean, default: false },
+  mobile: { type: Boolean, default: false },
+  open: { type: Boolean, default: true },
+})
+
+defineEmits(['toggle'])
+</script>
+
 <template>
-  <aside class="w-13 bg-base-200 border-r border-base-300 flex flex-col items-center py-3 gap-2">
-    <!-- Top Panel - Brand -->
-    <SidebarTopPanel />
-    <div class="divider my-0"></div>
-
-    <!-- Central Panel - Buttons -->
-    <SidebarCentralPanel />
-    <div class="divider my-0"></div>
-
-    <!-- Spacer -->
-    <div class="flex-1"></div>
-
-    <!-- Bottom - Settings/Logout -->
-    <div class="divider my-0"></div>
-    <SidebarBottomPanel />
+  <aside
+    class="app-sidebar"
+    :class="{
+      'app-sidebar--collapsed': collapsed,
+      'app-sidebar--mobile': mobile,
+      'app-sidebar--open': open,
+    }"
+  >
+    <SidebarTopPanel :collapsed="collapsed" :mobile="mobile" @toggle="$emit('toggle')" />
+    <SidebarCentralPanel :collapsed="collapsed" />
+    <SidebarBottomPanel :collapsed="collapsed" />
   </aside>
 </template>

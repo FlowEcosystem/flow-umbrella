@@ -1,1 +1,0 @@
-<template>ai detection</template>

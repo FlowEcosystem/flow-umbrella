@@ -1,9 +1,45 @@
-import * as lucideIcons from "lucide-vue-next";
+import {
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  PanelLeft,
+  PanelLeftClose,
+  X,
+  LayoutGrid,
+  ChevronRight,
+  ChevronDown,
+  Settings,
+  LogOut,
+  House,
+  MapPinned,
+  Monitor,
+  Users,
+  AlertCircle,
+} from 'lucide-vue-next'
+
+const icons = {
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  PanelLeft,
+  PanelLeftClose,
+  X,
+  LayoutGrid,
+  ChevronRight,
+  ChevronDown,
+  Settings,
+  LogOut,
+  House,
+  MapPinned,
+  Monitor,
+  Users,
+  AlertCircle,
+}
 
 export default {
   install(app) {
-    Object.entries(lucideIcons).forEach(([name, component]) => {
-      app.component(name, component);
-    });
+    Object.entries(icons).forEach(([name, component]) => {
+      app.component(name, component)
+    })
   },
-};
+}

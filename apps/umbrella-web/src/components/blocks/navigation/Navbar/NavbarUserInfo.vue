@@ -1,18 +1,31 @@
 <script setup>
+import { useAuthStore } from '@/stores/auth.store'
+
 const props = defineProps({
-  userFullName: {
-    type: String,
-    default: 'Гость',
-  },
-  userPosition: {
-    type: String,
-    default: 'Нет активной сессии',
-  },
-  userAvatarUrl: {
-    type: String,
-    default: '',
-  },
+  userFullName: { type: String, default: 'Пользователь' },
+  userPosition: { type: String, default: '' },
 })
+
+const authStore = useAuthStore()
+const router = useRouter()
+const menu = ref()
+
+const menuItems = computed(() => [
+  {
+    label: 'Настройки',
+    icon: 'Settings',
+    command: goToSettings,
+  },
+  {
+    separator: true,
+  },
+  {
+    label: 'Выйти',
+    icon: 'LogOut',
+    command: handleLogout,
+    danger: true,
+  },
+])
 
 const initials = computed(() =>
   props.userFullName
@@ -23,22 +36,50 @@ const initials = computed(() =>
     .join('')
     .toUpperCase(),
 )
+
+function toggleMenu(event) {
+  menu.value?.toggle(event)
+}
+
+function goToSettings() {
+  menu.value?.hide?.()
+  router.push('/settings')
+}
+
+async function handleLogout() {
+  menu.value?.hide?.()
+  await authStore.logout()
+  router.push('/login')
+}
 </script>
 
 <template>
-  <div class="flex items-center gap-3 px-2">
-    <div class="avatar">
-      <div
-        class="flex w-12 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary"
-      >
-        <img v-if="userAvatarUrl" :src="userAvatarUrl" alt="Аватар" />
-        <span v-else>{{ initials || 'FL' }}</span>
-      </div>
-    </div>
+  <div class="navbar-user">
+    <button
+      type="button"
+      class="navbar-user-trigger"
+      :disabled="!authStore.isAuthenticated"
+      @click="toggleMenu"
+    >
+      <span class="navbar-avatar">{{ initials || 'П' }}</span>
+      <span class="navbar-user-name">{{ userFullName }}</span>
+      <ChevronDown class="icon-sm navbar-user-chevron" />
+    </button>
 
-    <div class="hidden sm:flex flex-col leading-tight cursor-default">
-      <span class="text-sm font-medium">{{ userFullName }}</span>
-      <span class="text-xs opacity-60">{{ userPosition }}</span>
-    </div>
+    <Menu ref="menu" :model="menuItems" popup>
+      <template #start>
+        <div class="menu-user-summary">
+          <span class="menu-user-title">{{ userFullName }}</span>
+          <span v-if="userPosition" class="menu-user-subtitle">{{ userPosition }}</span>
+        </div>
+      </template>
+
+      <template #item="{ item, props: itemProps }">
+        <a v-bind="itemProps.action" class="menu-item" :class="{ 'menu-item--danger': item.danger }">
+          <component :is="item.icon" class="icon-sm" />
+          <span>{{ item.label }}</span>
+        </a>
+      </template>
+    </Menu>
   </div>
 </template>

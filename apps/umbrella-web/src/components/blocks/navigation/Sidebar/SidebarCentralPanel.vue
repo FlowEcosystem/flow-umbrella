@@ -1,23 +1,32 @@
 <script setup>
 import { useNavigation } from '@/composables/navigation/useNavigation'
 
+const props = defineProps({
+  collapsed: { type: Boolean, default: false },
+})
+
 const { sections } = useNavigation()
 </script>
 
 <template>
-  <nav class="flex flex-col items-center gap-1">
-    <template v-for="(section, index) in sections" :key="section.key">
-      <UiRouteButton
-        v-for="item in section.items"
-        :key="item.to"
-        :to="item.to"
-        :tooltip="item.tooltip"
-        :exact="item.exact"
-      >
-        <component :is="item.icon" class="size-5" />
-      </UiRouteButton>
+  <div class="sidebar-central-panel">
+    <nav class="sidebar-nav">
+      <section v-for="section in sections" :key="section.key" class="sidebar-section">
+        <div v-if="!props.collapsed" class="sidebar-section-label">{{ section.label }}</div>
 
-      <div v-if="index < sections.length - 1" class="divider my-0"></div>
-    </template>
-  </nav>
+        <div class="sidebar-section-panel" :class="{ 'sidebar-section-panel--collapsed': props.collapsed }">
+          <SidebarNavLink
+            v-for="item in section.items"
+            :key="item.to"
+            :to="item.to"
+            :label="item.label"
+            :icon="item.icon"
+            :tooltip="item.tooltip"
+            :collapsed="props.collapsed"
+            :exact="item.exact"
+          />
+        </div>
+      </section>
+    </nav>
+  </div>
 </template>
