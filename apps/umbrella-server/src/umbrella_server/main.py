@@ -5,16 +5,17 @@ from contextlib import asynccontextmanager
 
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from umbrella_server.core.config import get_settings
 from umbrella_server.core.logging import configure_logging, get_logger
 from umbrella_server.di import build_container
+from umbrella_server.domains.auth.router import admins_router, auth_router
+from umbrella_server.middleware.exception_handlers import register_exception_handlers
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Startup и shutdown логика.
-    """
     logger = get_logger(__name__)
     settings = get_settings()
     logger.info("app_started", env=settings.env.value, debug=settings.debug)
@@ -27,7 +28,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    """Application factory. Вызывается uvicorn'ом."""
     settings = get_settings()
     configure_logging(settings)
 
@@ -39,10 +39,22 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    register_exception_handlers(app)
+
     container = build_container()
     setup_dishka(container=container, app=app)
 
-    # routes
+    # /v1/*
+    app.include_router(auth_router)
+    app.include_router(admins_router)
 
     return app
 

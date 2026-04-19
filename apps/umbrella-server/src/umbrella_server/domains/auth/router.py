@@ -1,0 +1,223 @@
+"""HTTP-роутеры auth-домена: /api/auth/* и /api/admins/*."""
+
+from typing import Annotated
+from uuid import UUID
+
+from dishka.integrations.fastapi import FromDishka, inject
+from fastapi import APIRouter, Depends, Request, Response, status
+
+from umbrella_server.core.config import Settings
+from umbrella_server.core.exceptions import ConflictError
+from umbrella_server.core.pagination import Page, PaginationMeta, PaginationParams
+from umbrella_server.domains.auth.dependencies import (
+    current_any_admin,
+    current_refresh_token_raw,
+    current_superadmin,
+    get_client_meta,
+)
+from umbrella_server.domains.auth.models import Admin
+from umbrella_server.domains.auth.schemas import (
+    AdminCreate,
+    AdminRead,
+    AdminUpdate,
+    LoginRequest,
+    MeResponse,
+    PasswordChange,
+    TokenResponse,
+)
+from umbrella_server.domains.auth.service import AdminService, AuthService
+
+
+auth_router = APIRouter(prefix="/v1/auth", tags=["auth"])
+admins_router = APIRouter(prefix="/v1/admins", tags=["admins"])
+
+
+# -----------------------------------------------------------------------------
+# Auth flow
+# -----------------------------------------------------------------------------
+
+def _set_refresh_cookie(response: Response, raw_refresh: str, settings: Settings) -> None:
+    response.set_cookie(
+        key="refresh_token",
+        value=raw_refresh,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        max_age=settings.jwt_refresh_ttl_days * 86400,
+        path="/v1/auth",
+        domain=settings.cookie_domain or None,
+    )
+
+
+def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(
+        key="refresh_token",
+        path="/v1/auth",
+        domain=settings.cookie_domain or None,
+    )
+
+
+@auth_router.post("/login", response_model=TokenResponse)
+@inject
+async def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    auth_service: FromDishka[AuthService],
+    settings: FromDishka[Settings],
+) -> TokenResponse:
+    user_agent, ip = get_client_meta(request)
+    _, access, raw_refresh = await auth_service.login(
+        email=payload.email,
+        password=payload.password,
+        user_agent=user_agent,
+        ip_address=ip,
+    )
+    _set_refresh_cookie(response, raw_refresh, settings)
+    return TokenResponse(
+        access_token=access,
+        expires_in=settings.jwt_access_ttl_min * 60,
+    )
+
+
+@auth_router.post("/refresh", response_model=TokenResponse)
+@inject
+async def refresh(
+    request: Request,
+    response: Response,
+    raw_refresh: Annotated[str, Depends(current_refresh_token_raw)],
+    auth_service: FromDishka[AuthService],
+    settings: FromDishka[Settings],
+) -> TokenResponse:
+    user_agent, ip = get_client_meta(request)
+    _, access, new_raw_refresh = await auth_service.refresh(
+        raw_refresh_token=raw_refresh,
+        user_agent=user_agent,
+        ip_address=ip,
+    )
+    _set_refresh_cookie(response, new_raw_refresh, settings)
+    return TokenResponse(
+        access_token=access,
+        expires_in=settings.jwt_access_ttl_min * 60,
+    )
+
+
+@auth_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def logout(
+    request: Request,
+    response: Response,
+    auth_service: FromDishka[AuthService],
+    settings: FromDishka[Settings],
+) -> None:
+    # logout делаем мягким: если куки нет — просто очищаем, не кидаем.
+    raw = request.cookies.get("refresh_token")
+    if raw:
+        await auth_service.logout(raw_refresh_token=raw)
+    _clear_refresh_cookie(response, settings)
+
+
+@auth_router.get("/me", response_model=MeResponse)
+async def me(
+    admin: Annotated[Admin, Depends(current_any_admin)],
+) -> MeResponse:
+    return MeResponse.model_validate(admin)
+
+
+@auth_router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def change_my_password(
+    payload: PasswordChange,
+    admin: Annotated[Admin, Depends(current_any_admin)],
+    response: Response,
+    admin_service: FromDishka[AdminService],
+    settings: FromDishka[Settings],
+) -> None:
+    await admin_service.change_password(
+        admin_id=admin.id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
+    # Все refresh отозваны — clearим cookie, чтобы фронт не ходил с мёртвым токеном.
+    _clear_refresh_cookie(response, settings)
+
+
+# -----------------------------------------------------------------------------
+# Admins CRUD (только superadmin)
+# -----------------------------------------------------------------------------
+
+@admins_router.post("", response_model=AdminRead, status_code=status.HTTP_201_CREATED)
+@inject
+async def create_admin(
+    payload: AdminCreate,
+    _current: Annotated[Admin, Depends(current_superadmin)],
+    admin_service: FromDishka[AdminService],
+) -> AdminRead:
+    admin = await admin_service.create(
+        email=payload.email,
+        password=payload.password,
+        role=payload.role,
+        full_name=payload.full_name,
+    )
+    return AdminRead.model_validate(admin)
+
+
+@admins_router.get("", response_model=Page[AdminRead])
+@inject
+async def list_admins(
+    _current: Annotated[Admin, Depends(current_superadmin)],
+    pagination: Annotated[PaginationParams, Depends()],
+    admin_service: FromDishka[AdminService],
+) -> Page[AdminRead]:
+    items, total = await admin_service.list(
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return Page[AdminRead](
+        items=[AdminRead.model_validate(a) for a in items],
+        meta=PaginationMeta(total=total, limit=pagination.limit, offset=pagination.offset),
+    )
+
+
+@admins_router.get("/{admin_id}", response_model=AdminRead)
+@inject
+async def get_admin(
+    admin_id: UUID,
+    _current: Annotated[Admin, Depends(current_superadmin)],
+    admin_service: FromDishka[AdminService],
+) -> AdminRead:
+    admin = await admin_service.get(admin_id)
+    return AdminRead.model_validate(admin)
+
+
+@admins_router.patch("/{admin_id}", response_model=AdminRead)
+@inject
+async def update_admin(
+    admin_id: UUID,
+    payload: AdminUpdate,
+    current: Annotated[Admin, Depends(current_superadmin)],
+    admin_service: FromDishka[AdminService],
+) -> AdminRead:
+    if admin_id == current.id:
+        raise ConflictError(
+            message="Use /v1/auth/me/password to change your own credentials",
+            details={"admin_id": str(admin_id)},
+        )
+    fields = payload.model_dump(exclude_unset=True)
+    admin = await admin_service.update(admin_id, fields)
+    return AdminRead.model_validate(admin)
+
+
+@admins_router.delete("/{admin_id}", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def delete_admin(
+    admin_id: UUID,
+    current: Annotated[Admin, Depends(current_superadmin)],
+    admin_service: FromDishka[AdminService],
+) -> None:
+    if admin_id == current.id:
+        raise ConflictError(
+            message="You cannot delete yourself",
+            details={"admin_id": str(admin_id)},
+        )
+    await admin_service.delete(admin_id)
