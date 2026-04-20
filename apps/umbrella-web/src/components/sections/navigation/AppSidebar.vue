@@ -19,6 +19,5 @@ defineEmits(['toggle'])
   >
     <SidebarTopPanel :collapsed="collapsed" :mobile="mobile" @toggle="$emit('toggle')" />
     <SidebarCentralPanel :collapsed="collapsed" />
-    <SidebarBottomPanel :collapsed="collapsed" />
   </aside>
 </template>

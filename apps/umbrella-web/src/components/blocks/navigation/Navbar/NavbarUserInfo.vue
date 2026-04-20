@@ -9,6 +9,19 @@ const props = defineProps({
 const authStore = useAuthStore()
 const router = useRouter()
 const menu = ref()
+const avatarError = ref(false)
+
+const avatarUrl = computed(() => authStore.currentUser?.avatar_url || '')
+
+console.log(authStore.user)
+
+watch(avatarUrl, () => {
+  avatarError.value = false
+})
+
+function handleAvatarError() {
+  avatarError.value = true
+}
 
 const menuItems = computed(() => [
   {
@@ -61,7 +74,19 @@ async function handleLogout() {
       :disabled="!authStore.isAuthenticated"
       @click="toggleMenu"
     >
-      <span class="navbar-avatar">{{ initials || 'П' }}</span>
+      <span class="navbar-avatar">
+        <img
+          v-if="avatarUrl && !avatarError"
+          :src="avatarUrl"
+          :alt="userFullName"
+          class="navbar-avatar-img"
+          @error="handleAvatarError"
+        />
+        <span v-else class="navbar-avatar-fallback">
+          {{ initials || 'Сотрудник' }}
+        </span>
+      </span>
+
       <span class="navbar-user-name">{{ userFullName }}</span>
       <ChevronDown class="icon-sm navbar-user-chevron" />
     </button>
@@ -75,7 +100,11 @@ async function handleLogout() {
       </template>
 
       <template #item="{ item, props: itemProps }">
-        <a v-bind="itemProps.action" class="menu-item" :class="{ 'menu-item--danger': item.danger }">
+        <a
+          v-bind="itemProps.action"
+          class="menu-item"
+          :class="{ 'menu-item--danger': item.danger }"
+        >
           <component :is="item.icon" class="icon-sm" />
           <span>{{ item.label }}</span>
         </a>

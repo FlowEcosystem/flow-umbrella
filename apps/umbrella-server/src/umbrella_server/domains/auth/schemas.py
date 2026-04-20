@@ -36,9 +36,14 @@ class MeResponse(BaseModel):
     id: UUID
     email: EmailStr
     full_name: str | None
+    avatar_url: str | None
     role: AdminRole
     is_active: bool
     last_login_at: datetime | None
+
+class MeUpdate(BaseModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None, max_length=2048)
 
 # -----------------------------------------------------------------------------
 # Admin CRUD
@@ -64,6 +69,7 @@ class AdminRead(BaseModel):
     id: UUID
     email: EmailStr
     full_name: str | None
+    avatar_url: str | None
     role: AdminRole
     is_active: bool
     last_login_at: datetime | None

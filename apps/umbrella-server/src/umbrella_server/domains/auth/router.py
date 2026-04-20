@@ -123,6 +123,22 @@ async def me(
 ) -> MeResponse:
     return MeResponse.model_validate(admin)
 
+from umbrella_server.domains.auth.schemas import MeUpdate
+
+
+@auth_router.patch("/me", response_model=MeResponse)
+@inject
+async def update_me(
+    payload: MeUpdate,
+    admin: Annotated[Admin, Depends(current_any_admin)],
+    admin_service: FromDishka[AdminService],
+) -> MeResponse:
+    fields = payload.model_dump(exclude_unset=True)
+    if not fields:
+        # Пустой PATCH — возвращаем как есть, не трогаем БД.
+        return MeResponse.model_validate(admin)
+    updated = await admin_service.update_self(admin.id, fields)
+    return MeResponse.model_validate(updated)
 
 @auth_router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
 @inject

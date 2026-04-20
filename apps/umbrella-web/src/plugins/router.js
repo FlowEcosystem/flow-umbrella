@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import pinia from '@/plugins/pinia'
 import { useAuthStore } from '@/stores/auth.store'
+import { roleHasCapability } from '@/config/capabilities'
 
 const DefaultLayout = () => import('@/layouts/DefaultLayout.vue')
 const EmptyLayout = () => import('@/layouts/EmptyLayout.vue')
@@ -11,7 +12,7 @@ const HomePage = () => import('@/pages/general/HomePage.vue')
 const NotFoundPage = () => import('@/pages/general/NotFoundPage.vue')
 const ForbiddenPage = () => import('@/pages/general/ForbiddenPage.vue')
 const LoginPage = () => import('@/pages/auth/LoginPage.vue')
-const SettingsPage = () => import('@/pages/general/SettingsPage.vue')
+const SettingsPage = () => import('@/pages/settings/SettingsPage.vue')
 export const isRouteNavigating = ref(true)
 
 const routes = [
@@ -33,6 +34,7 @@ const routes = [
         component: SettingsPage,
         meta: {
           crumb: 'Настройки',
+          capability: 'self:read',
         },
       },
     ],
@@ -100,8 +102,8 @@ router.beforeEach(async (to) => {
     }
   }
 
-  const requiredRoles = to.matched.flatMap((record) => record.meta?.roles ?? [])
-  if (requiredRoles.length && !authStore.hasRole(requiredRoles)) {
+  const capability = to.matched.findLast((r) => r.meta?.capability)?.meta?.capability
+  if (capability && !roleHasCapability(authStore.currentUser?.role, capability)) {
     return {
       name: 'forbidden',
       query: { from: to.fullPath },

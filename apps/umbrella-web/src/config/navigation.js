@@ -1,3 +1,5 @@
+import { roleHasCapability } from './capabilities'
+
 export const navigationSections = Object.freeze([
   {
     key: 'workspace',
@@ -9,7 +11,22 @@ export const navigationSections = Object.freeze([
         tooltip: 'Обзор',
         icon: 'LayoutGrid',
         exact: true,
-        roles: [],
+        capability: null,
+      },
+    ],
+  },
+  {
+    key: 'system',
+    label: null,
+    bottom: true,
+    items: [
+      {
+        to: '/settings',
+        label: 'Настройки',
+        tooltip: 'Настройки',
+        icon: 'Settings',
+        exact: false,
+        capability: 'self:read',
       },
     ],
   },
@@ -19,7 +36,10 @@ export function getAccessibleNavigation(role) {
   return navigationSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => !item.roles.length || item.roles.includes(role)),
+      items: section.items.filter((item) => {
+        if (!item.capability) return true
+        try { return roleHasCapability(role, item.capability) } catch { return false }
+      }),
     }))
     .filter((section) => section.items.length > 0)
 }

@@ -41,6 +41,7 @@ class Admin(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    avatar_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="admin",

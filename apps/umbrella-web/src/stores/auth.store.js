@@ -81,6 +81,15 @@ export const useAuthStore = defineStore('auth', () => {
     await refresh()
   }
 
+  async function updateProfile(patch) {
+    const data = await authApi.updateProfile(patch)
+    currentUser.value = { ...currentUser.value, ...data }
+  }
+
+  async function changePassword(current_password, new_password) {
+    await authApi.changePassword({ current_password, new_password })
+  }
+
   return {
     accessToken,
     currentUser,
@@ -94,5 +103,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchMe,
     refresh,
     ensureInitialized,
+    updateProfile,
+    changePassword,
   }
 })

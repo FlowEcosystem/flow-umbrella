@@ -237,6 +237,18 @@ class AdminService:
         logger.info("admin_updated", admin_id=admin.id, fields=list(fields.keys()))
         return admin
 
+    async def update_self(self, admin_id: UUID, fields: dict[str, Any]) -> Admin:
+        """Обновление своих собственных данных.
+
+        В отличие от update() — не требует superadmin прав и не позволяет
+        менять role/is_active/email. Проверка полей — на уровне схемы MeUpdate.
+        """
+        admin = await self.get(admin_id)
+        await self._admins.update(admin, fields)
+        await self._session.commit()
+        logger.info("admin_self_updated", admin_id=admin.id, fields=list(fields.keys()))
+        return admin
+
     async def delete(self, admin_id: UUID) -> None:
         admin = await self.get(admin_id)
         if admin.role == AdminRole.SUPERADMIN:
