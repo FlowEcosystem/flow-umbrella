@@ -17,6 +17,7 @@ from umbrella_server.domains.instance.bootstrap import ensure_instance
 
 from umbrella_server.domains.auth.routers import admins_router, auth_router
 from umbrella_server.domains.instance.router import instance_router
+from umbrella_server.domains.agents.routers import agents_router
 
 
 @asynccontextmanager
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(admins_router)
     app.include_router(instance_router)
+    app.include_router(agents_router)
 
     return app
 

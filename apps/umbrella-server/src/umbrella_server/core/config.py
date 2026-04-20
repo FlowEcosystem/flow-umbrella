@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_domain: str | None = None
 
+    # --- agents ---
+    agent_enrollment_token_ttl_days: int = 7
+
     @field_validator("database_url")
     @classmethod
     def _ensure_asyncpg(cls, v: PostgresDsn) -> PostgresDsn:
