@@ -6,6 +6,7 @@ from umbrella_server.di.providers.config import ConfigProvider
 from umbrella_server.di.providers.db import DatabaseProvider
 
 from umbrella_server.domains.auth.providers import AuthProvider
+from umbrella_server.domains.instance.providers import InstanceProvider
 
 
 def build_container() -> AsyncContainer:
@@ -14,5 +15,6 @@ def build_container() -> AsyncContainer:
     return make_async_container(
         ConfigProvider(),
         DatabaseProvider(),
-        AuthProvider()
+        AuthProvider(),
+        InstanceProvider()
     )

@@ -3,6 +3,8 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,8 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from umbrella_server.core.config import get_settings
 from umbrella_server.core.logging import configure_logging, get_logger
 from umbrella_server.di import build_container
-from umbrella_server.domains.auth.router import admins_router, auth_router
 from umbrella_server.middleware.exception_handlers import register_exception_handlers
+from umbrella_server.domains.instance.bootstrap import ensure_instance
+
+from umbrella_server.domains.auth.routers import admins_router, auth_router
+from umbrella_server.domains.instance.router import instance_router
 
 
 @asynccontextmanager
@@ -19,6 +24,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = get_logger(__name__)
     settings = get_settings()
     logger.info("app_started", env=settings.env.value, debug=settings.debug)
+
+    # Инициализация instance
+    # Достаём session_factory из контейнера.
+    container = app.state.dishka_container
+    factory = await container.get(async_sessionmaker[AsyncSession])
+    await ensure_instance(factory)
 
     yield
 
@@ -55,6 +66,7 @@ def create_app() -> FastAPI:
     # /v1/*
     app.include_router(auth_router)
     app.include_router(admins_router)
+    app.include_router(instance_router)
 
     return app
 

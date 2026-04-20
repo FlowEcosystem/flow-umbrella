@@ -15,6 +15,10 @@ CAPABILITY_ROLES: dict[str, frozenset[AdminRole]] = {
     # admins — только superadmin
     "admins:read": frozenset({AdminRole.SUPERADMIN}),
     "admins:write": frozenset({AdminRole.SUPERADMIN}),
+
+    # instance
+    "instance:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+    "instance:write": frozenset({AdminRole.SUPERADMIN}),
 }
 
 
