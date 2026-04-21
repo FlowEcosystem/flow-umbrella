@@ -30,6 +30,43 @@ select {
   font-family: var(--font-sans);
 }
 
+html {
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+:where(*) {
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+:where(*::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
+}
+
+:where(*::-webkit-scrollbar-track) {
+  background: var(--color-scrollbar-track);
+  border-radius: var(--radius-full);
+}
+
+:where(*::-webkit-scrollbar-thumb) {
+  background: var(--color-scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: var(--radius-full);
+  background-clip: padding-box;
+}
+
+:where(*::-webkit-scrollbar-thumb:hover) {
+  background: var(--color-scrollbar-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+:where(*::-webkit-scrollbar-corner) {
+  background: transparent;
+}
+
 a {
   color: var(--color-accent);
   text-decoration: none;

@@ -141,6 +141,62 @@
   padding: 22px 24px 0;
 }
 
+.p-dialog .p-dialog-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+:where(
+  .dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-header-close-button,
+  .p-dialog .p-dialog-header-actions .p-button
+) {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  color: var(--color-text-muted) !important;
+  background: transparent !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-full) !important;
+  box-shadow: none !important;
+}
+
+:where(
+  .dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-header-close-button,
+  .p-dialog .p-dialog-header-actions .p-button
+):hover:not(:disabled) {
+  color: var(--color-text) !important;
+  background: var(--color-surface-subtle) !important;
+  border-color: var(--color-border-strong) !important;
+}
+
+:where(
+  .dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-header-close-button,
+  .p-dialog .p-dialog-header-actions .p-button
+):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+:where(
+  .dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-close-button,
+  .p-dialog .p-dialog-header-actions .p-dialog-header-close-button,
+  .p-dialog .p-dialog-header-actions .p-button
+) .p-icon,
+:where(.dialog-close-button) svg {
+  width: 14px;
+  height: 14px;
+}
+
 .p-dialog .p-dialog-content {
   padding: 16px 24px 0;
 }

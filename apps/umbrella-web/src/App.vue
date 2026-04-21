@@ -1,6 +1,6 @@
 <script setup>
-import { isRouteNavigating } from '@/plugins/router'
-import { useAuthStore } from '@/stores/auth.store'
+import { isRouteNavigating } from '@/app/plugins/router'
+import { useAuthStore } from '@/domains/auth/store'
 
 const authStore = useAuthStore()
 const route = useRoute()

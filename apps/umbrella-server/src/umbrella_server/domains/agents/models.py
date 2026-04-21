@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import DateTime, Enum, Index, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from umbrella_server.db.base import (
     Base,
@@ -12,6 +12,7 @@ from umbrella_server.db.base import (
     TimestampMixin,
     UUIDPrimaryKeyMixin,
 )
+from umbrella_server.domains.groups.models import Group
 
 
 class AgentStatus(str, enum.Enum):
@@ -59,6 +60,12 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    groups: Mapped[list["Group"]] = relationship(  # noqa: F821
+        secondary="agent_group_memberships",
+        back_populates="agents",
+        lazy="selectin",
+    )
+
 
     __table_args__ = (
         # UNIQUE hostname только среди активных — позволяет пересоздать

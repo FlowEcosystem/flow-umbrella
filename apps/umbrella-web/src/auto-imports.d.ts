@@ -8,6 +8,7 @@ export {}
 declare global {
   const EffectScope: typeof import('vue').EffectScope
   const acceptHMRUpdate: typeof import('pinia').acceptHMRUpdate
+  const buildValidationState: typeof import('./shared/lib/domain-ui.js').buildValidationState
   const computed: typeof import('vue').computed
   const createApp: typeof import('vue').createApp
   const createPinia: typeof import('pinia').createPinia
@@ -16,6 +17,8 @@ declare global {
   const defineComponent: typeof import('vue').defineComponent
   const defineStore: typeof import('pinia').defineStore
   const effectScope: typeof import('vue').effectScope
+  const formatCalendarDateTime: typeof import('./shared/lib/domain-ui.js').formatCalendarDateTime
+  const formatRelativeDate: typeof import('./shared/lib/domain-ui.js').formatRelativeDate
   const getActivePinia: typeof import('pinia').getActivePinia
   const getCurrentInstance: typeof import('vue').getCurrentInstance
   const getCurrentScope: typeof import('vue').getCurrentScope
@@ -34,6 +37,7 @@ declare global {
   const mapWritableState: typeof import('pinia').mapWritableState
   const markRaw: typeof import('vue').markRaw
   const nextTick: typeof import('vue').nextTick
+  const normalizeOptionalText: typeof import('./shared/lib/domain-ui.js').normalizeOptionalText
   const onActivated: typeof import('vue').onActivated
   const onBeforeMount: typeof import('vue').onBeforeMount
   const onBeforeRouteLeave: typeof import('vue-router').onBeforeRouteLeave
@@ -67,13 +71,18 @@ declare global {
   const toValue: typeof import('vue').toValue
   const triggerRef: typeof import('vue').triggerRef
   const unref: typeof import('vue').unref
+  const useAdminsStore: typeof import('./domains/admins/store.js').useAdminsStore
+  const useAgentsStore: typeof import('./domains/agents/store.js').useAgentsStore
   const useAttrs: typeof import('vue').useAttrs
-  const useAuthStore: typeof import('./stores/auth.store.js').useAuthStore
+  const useAuthStore: typeof import('./domains/auth/store.js').useAuthStore
+  const useBreadcrumbs: typeof import('./app/navigation/composables/useBreadcrumbs.js').useBreadcrumbs
   const useCssModule: typeof import('vue').useCssModule
   const useCssVars: typeof import('vue').useCssVars
+  const useGroupsStore: typeof import('./domains/groups/store.js').useGroupsStore
   const useId: typeof import('vue').useId
   const useLink: typeof import('vue-router').useLink
   const useModel: typeof import('vue').useModel
+  const useNavigation: typeof import('./app/navigation/composables/useNavigation.js').useNavigation
   const useNotificationsStore: typeof import('./stores/notifications.store.js').useNotificationsStore
   const useRoute: typeof import('vue-router').useRoute
   const useRouter: typeof import('vue-router').useRouter

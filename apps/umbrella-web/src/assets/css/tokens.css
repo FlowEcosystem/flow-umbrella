@@ -55,6 +55,9 @@
   --color-shell-backdrop: rgba(18, 17, 15, 0.9);
   --color-shell-ghost: rgba(255, 255, 255, 0.04);
   --color-navbar-bg: rgba(31, 30, 27, 0.94);
+  --color-scrollbar-track: rgba(255, 255, 255, 0.035);
+  --color-scrollbar-thumb: rgba(231, 220, 200, 0.18);
+  --color-scrollbar-thumb-hover: rgba(217, 120, 69, 0.48);
 
   --radius-sm: 6px;
   --radius-md: 10px;

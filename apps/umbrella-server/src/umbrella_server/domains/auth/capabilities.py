@@ -23,6 +23,10 @@ CAPABILITY_ROLES: dict[str, frozenset[AdminRole]] = {
     # agents
     "agents:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
     "agents:write": frozenset({AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+
+    # groups
+    "groups:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+    "groups:write": frozenset({AdminRole.ADMIN, AdminRole.SUPERADMIN}),
 }
 
 

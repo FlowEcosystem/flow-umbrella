@@ -13,12 +13,12 @@ export default defineConfig({
     vueDevTools(),
     AutoImport({
       imports: ['vue', 'vue-router', 'pinia'],
-      dirs: ['src/composables', 'src/stores', 'src/utils'],
+      dirs: ['src/app/navigation/composables', 'src/shared/lib'],
       dts: 'src/auto-imports.d.ts',
     }),
     Components({
-      dirs: ['src/components'],
-      dts: 'src/components.d.ts',
+      dirs: ['src/shared/ui', 'src/app/navigation'],
+      dts: 'src/ui-components.d.ts',
       deep: true,
       resolvers: [PrimeVueResolver()],
     }),
