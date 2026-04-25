@@ -18,6 +18,8 @@ from umbrella_server.domains.groups.schemas import (
 from umbrella_server.domains.groups.service import GroupService
 from umbrella_server.domains.auth.dependencies import require_capability
 from umbrella_server.domains.auth.models import Admin
+from umbrella_server.domains.policies.schemas import EffectivePolicyItem
+from umbrella_server.domains.policies.service import PolicyService
 
 groups_router = APIRouter(prefix="/v1/groups", tags=["groups"])
 
@@ -94,7 +96,7 @@ async def update_group(
         group = await service.update(group_id, fields)
     else:
         group = await service.get(group_id)
-        agents_count = await service.count_agents(group.id)
+    agents_count = await service.count_agents(group.id)
     return _to_read(group, agents_count)
 
 
@@ -155,3 +157,27 @@ async def remove_agent_from_group(
     service: FromDishka[GroupService],
 ) -> None:
     await service.remove_agent(group_id, agent_id)
+
+
+@groups_router.get("/{group_id}/policies", response_model=list[EffectivePolicyItem])
+@inject
+async def list_group_policies(
+    group_id: UUID,
+    _current: Annotated[Admin, Depends(require_capability("groups:read"))],
+    policy_service: FromDishka[PolicyService],
+) -> list[EffectivePolicyItem]:
+    policies = await policy_service.get_policies_for_group(group_id)
+    result = []
+    for p in policies:
+        service_rules_count = sum(len(s.rules or []) for s in (p.services or []))
+        result.append(EffectivePolicyItem(
+            id=p.id,
+            name=p.name,
+            kind=p.kind,
+            action=p.action,
+            is_active=p.is_active,
+            is_global=p.is_global,
+            version=p.version,
+            rules_count=service_rules_count + len(p.custom_rules or []),
+        ))
+    return result

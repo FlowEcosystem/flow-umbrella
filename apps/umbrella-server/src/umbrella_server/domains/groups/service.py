@@ -116,6 +116,13 @@ class GroupService:
         )
         return added, already
 
+    async def list_groups_for_agent(
+        self, agent_id: UUID
+    ) -> tuple[list[Group], dict[UUID, int]]:
+        groups = await self._repo.list_groups_for_agent(agent_id)
+        counts = await self._repo.counts_agents_bulk([g.id for g in groups])
+        return groups, counts
+
     async def remove_agent(self, group_id: UUID, agent_id: UUID) -> None:
         await self.get(group_id)
         # Не кидаем, если membership'а не было — идемпотентная операция.

@@ -14,11 +14,14 @@ from umbrella_server.core.logging import configure_logging, get_logger
 from umbrella_server.di import build_container
 from umbrella_server.middleware.exception_handlers import register_exception_handlers
 from umbrella_server.domains.instance.bootstrap import ensure_instance
+from umbrella_server.pki import BranchCA
 
 from umbrella_server.domains.auth.routers import admins_router, auth_router
 from umbrella_server.domains.instance.router import instance_router
-from umbrella_server.domains.agents.routers import agents_router
+from umbrella_server.domains.agents.routers import agents_router, agent_router
 from umbrella_server.domains.groups.routers import groups_router
+from umbrella_server.domains.policies.routers import policies_router, services_router
+from umbrella_server.domains.commands.routers import commands_router
 
 
 @asynccontextmanager
@@ -28,10 +31,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("app_started", env=settings.env.value, debug=settings.debug)
 
     # Инициализация instance
-    # Достаём session_factory из контейнера.
     container = app.state.dishka_container
     factory = await container.get(async_sessionmaker[AsyncSession])
     await ensure_instance(factory)
+
+    # Eager-инициализация PKI CA (генерирует если файлов нет)
+    if settings.pki_ca_cert_path and settings.pki_ca_key_path:
+        try:
+            ca = BranchCA.ensure(
+                cert_path=settings.pki_ca_cert_path,
+                key_path=settings.pki_ca_key_path,
+                branch_name="Umbrella",
+            )
+            logger.info("pki_ready", expires=ca.cert_expires_at.isoformat())
+        except Exception as exc:
+            logger.error("pki_init_failed", error=str(exc))
+    else:
+        logger.warning("pki_not_configured", hint="Set SERVER_PKI_CA_CERT_PATH and SERVER_PKI_CA_KEY_PATH")
 
     yield
 
@@ -70,7 +86,11 @@ def create_app() -> FastAPI:
     app.include_router(admins_router)
     app.include_router(instance_router)
     app.include_router(agents_router)
+    app.include_router(agent_router)
     app.include_router(groups_router)
+    app.include_router(policies_router)
+    app.include_router(services_router)
+    app.include_router(commands_router)
 
     return app
 

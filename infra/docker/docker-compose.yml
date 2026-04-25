@@ -33,6 +33,8 @@ services:
       - ../../apps/umbrella-server/src:/app/src
       - ../../apps/umbrella-server/alembic:/app/alembic
       - ../../apps/umbrella-server/alembic.ini:/app/alembic.ini
+      - ../../apps/umbrella-server/pki:/app/pki
+      - ../../apps/umbrella-server/scripts:/app/scripts
     depends_on:
       postgres:
         condition: service_healthy

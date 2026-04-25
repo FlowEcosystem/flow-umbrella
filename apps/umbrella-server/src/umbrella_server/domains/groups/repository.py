@@ -167,6 +167,17 @@ class GroupRepository:
         result = await self._session.execute(stmt)
         return result.rowcount # pyright: ignore[reportAttributeAccessIssue]
 
+    async def list_groups_for_agent(self, agent_id: UUID) -> list[Group]:
+        """Группы, в которых состоит агент."""
+        stmt = (
+            self._active_groups()
+            .join(agent_group_memberships, agent_group_memberships.c.group_id == Group.id)
+            .where(agent_group_memberships.c.agent_id == agent_id)
+            .order_by(Group.name)
+        )
+        result = await self._session.scalars(stmt)
+        return list(result.all())
+
     async def verify_agents_exist(self, agent_ids: list[UUID]) -> list[UUID]:
         """Возвращает ID тех агентов, которых нет в БД (или soft-deleted)."""
         stmt = select(Agent.id).where(

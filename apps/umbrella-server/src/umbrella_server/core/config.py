@@ -54,6 +54,9 @@ class Settings(BaseSettings):
 
     # --- agents ---
     agent_enrollment_token_ttl_days: int = 7
+    # true  — prod: агент аутентифицируется через X-Agent-Cert-CN от nginx (mTLS)
+    # false — dev: fallback на bearer token без nginx
+    agent_mtls: bool = True
 
     @field_validator("database_url")
     @classmethod

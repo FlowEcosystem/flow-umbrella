@@ -33,12 +33,12 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
 
     hostname: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[AgentStatus] = mapped_column(
-        Enum(AgentStatus, name="agent_status", native_enum=True),
+        Enum(AgentStatus, name="agent_status", native_enum=True, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=AgentStatus.PENDING,
     )
     os: Mapped[AgentOS] = mapped_column(
-        Enum(AgentOS, name="agent_os", native_enum=True),
+        Enum(AgentOS, name="agent_os", native_enum=True, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
     os_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -56,6 +56,13 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     # в БД только SHA-256 хэш.
     enrollment_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enrollment_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Заполняется после enrollment агента.
+    agent_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cert_serial: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    cert_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 
@@ -78,6 +85,8 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         ),
         # Быстрый поиск по hash при enrollment'е агента.
         Index("ix_agents_enrollment_token_hash", "enrollment_token_hash"),
+        # Быстрый поиск по hash agent_token при каждом запросе от агента.
+        Index("ix_agents_agent_token_hash", "agent_token_hash"),
         # Для фильтров в list-endpoint'е — частый предикат.
         Index("ix_agents_status", "status"),
     )

@@ -55,3 +55,43 @@ class AgentFilter(BaseModel):
     status: list[AgentStatus] | None = None
     os: AgentOS | None = None
     search: str | None = Field(default=None, max_length=255)
+
+
+# ---------------------------------------------------------------------------
+# Agent-facing schemas (enrollment, heartbeat, policy polling)
+# ---------------------------------------------------------------------------
+
+class AgentEnrollRequest(BaseModel):
+    enrollment_token: str
+    hostname: str = Field(min_length=1, max_length=255)
+    os: AgentOS
+    os_version: str | None = None
+    agent_version: str | None = None
+    ip_address: str | None = None
+    csr_pem: str
+
+
+class AgentEnrollResponse(BaseModel):
+    agent_id: UUID
+    agent_token: str
+    cert_pem: str
+    ca_cert_pem: str
+    cert_expires_at: datetime
+    policy_poll_interval_sec: int
+    command_poll_interval_sec: int
+
+
+class AgentHeartbeatRequest(BaseModel):
+    os_version: str | None = None
+    agent_version: str | None = None
+    ip_address: str | None = None
+
+
+class AgentRenewRequest(BaseModel):
+    csr_pem: str
+
+
+class AgentRenewResponse(BaseModel):
+    cert_pem: str
+    ca_cert_pem: str
+    cert_expires_at: datetime

@@ -25,9 +25,15 @@ class AgentRepository:
         return await self._session.scalar(stmt)
 
     async def get_by_enrollment_token_hash(self, token_hash: str) -> Agent | None:
-        """Для будущего agent-facing API (enrollment)."""
         stmt = self._active_agents().where(
             Agent.enrollment_token_hash == token_hash
+        )
+        return await self._session.scalar(stmt)
+
+    async def get_by_agent_token_hash(self, token_hash: str) -> Agent | None:
+        stmt = self._active_agents().where(
+            Agent.agent_token_hash == token_hash,
+            Agent.status == AgentStatus.ACTIVE,
         )
         return await self._session.scalar(stmt)
 

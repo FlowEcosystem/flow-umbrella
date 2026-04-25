@@ -33,7 +33,7 @@ class Admin(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[AdminRole] = mapped_column(
-        Enum(AdminRole, name="admin_role", native_enum=True),
+        Enum(AdminRole, name="admin_role", native_enum=True, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=AdminRole.ADMIN,
     )

@@ -17,6 +17,10 @@ from umbrella_server.domains.agents.schemas import (
 from umbrella_server.domains.agents.service import AgentService
 from umbrella_server.domains.auth.dependencies import require_capability
 from umbrella_server.domains.auth.models import Admin
+from umbrella_server.domains.groups.schemas import GroupRead
+from umbrella_server.domains.groups.service import GroupService
+from umbrella_server.domains.policies.schemas import EffectivePolicyItem
+from umbrella_server.domains.policies.service import PolicyService
 
 agents_router = APIRouter(prefix="/v1/agents", tags=["agents"])
 
@@ -97,6 +101,52 @@ async def delete_agent(
     service: FromDishka[AgentService],
 ) -> None:
     await service.delete(agent_id)
+
+
+@agents_router.get("/{agent_id}/groups", response_model=list[GroupRead])
+@inject
+async def list_agent_groups(
+    agent_id: UUID,
+    _current: Annotated[Admin, Depends(require_capability("agents:read"))],
+    group_service: FromDishka[GroupService],
+) -> list[GroupRead]:
+    groups, counts = await group_service.list_groups_for_agent(agent_id)
+    return [
+        GroupRead(
+            id=g.id,
+            name=g.name,
+            description=g.description,
+            color=g.color,
+            agents_count=counts.get(g.id, 0),
+            created_at=g.created_at,
+            updated_at=g.updated_at,
+        )
+        for g in groups
+    ]
+
+
+@agents_router.get("/{agent_id}/policies", response_model=list[EffectivePolicyItem])
+@inject
+async def list_agent_policies(
+    agent_id: UUID,
+    _current: Annotated[Admin, Depends(require_capability("agents:read"))],
+    policy_service: FromDishka[PolicyService],
+) -> list[EffectivePolicyItem]:
+    policies = await policy_service.get_policies_for_agent(agent_id)
+    result = []
+    for p in policies:
+        service_rules_count = sum(len(s.rules or []) for s in (p.services or []))
+        result.append(EffectivePolicyItem(
+            id=p.id,
+            name=p.name,
+            kind=p.kind,
+            action=p.action,
+            is_active=p.is_active,
+            is_global=p.is_global,
+            version=p.version,
+            rules_count=service_rules_count + len(p.custom_rules or []),
+        ))
+    return result
 
 
 @agents_router.post(

@@ -27,6 +27,14 @@ CAPABILITY_ROLES: dict[str, frozenset[AdminRole]] = {
     # groups
     "groups:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
     "groups:write": frozenset({AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+
+    # policies
+    "policies:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+    "policies:write": frozenset({AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+
+    # commands
+    "commands:read": frozenset({AdminRole.VIEWER, AdminRole.ADMIN, AdminRole.SUPERADMIN}),
+    "commands:write": frozenset({AdminRole.ADMIN, AdminRole.SUPERADMIN}),
 }
 
 
