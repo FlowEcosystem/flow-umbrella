@@ -1,0 +1,90 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans:  'DM Sans', system-ui, sans-serif;
+  --font-mono:  'DM Mono', ui-monospace, monospace;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
+  /* ── Palette ───────────────────────────────────────────── */
+  --color-bg:         #1c1917;
+  --color-bg-sidebar: #161412;
+  --color-bg-raised:  #242220;
+  --color-bg-overlay: #2e2b27;
+
+  --color-fg:         #e8dfd4;
+  --color-fg-muted:   #a89080;
+  --color-fg-subtle:  #6b5848;
+
+  --color-accent:     #d4785a;
+  --color-accent-lit: #e08d72;
+  --color-accent-dim: #3d2218;
+
+  /* ── shadcn CSS-variable aliases ──────────────────────── */
+  --color-background:          #1c1917;
+  --color-foreground:          #e8dfd4;
+  --color-primary:             #d4785a;
+  --color-primary-foreground:  #1c1917;
+  --color-secondary:           #242220;
+  --color-secondary-foreground:#e8dfd4;
+  --color-muted:               #2e2b27;
+  --color-muted-foreground:    #6b5848;
+  --color-destructive:         #e05252;
+  --color-border:              oklch(1 0 0 / 0.07);
+  --color-input:               #242220;
+  --color-ring:                #d4785a;
+}
+
+@keyframes draw-line {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1;   }
+}
+
+/* terminal line enter */
+.line-enter-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.line-enter-from   { opacity: 0; transform: translateX(-6px); }
+
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.25s ease; }
+.fade-enter-from,
+.fade-leave-to     { opacity: 0; }
+
+/* ── Scrollbars ────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(1 0 0 / 0.10);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(1 0 0 / 0.18);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
