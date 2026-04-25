@@ -120,9 +120,9 @@ src/
     lib/utils.js — cn() и утилиты
 ```
 
-### umbrella-web (фронтенд — устаревший)
+### umbrella-web (фронтенд — удалён)
 
-Прежний SPA на Vue 3 / PrimeVue. Заменён на `umbrella-web1`. Сохранён в монорепе, но новая разработка ведётся только в `umbrella-web1`.
+Прежний SPA на Vue 3 / PrimeVue. Заменён на `umbrella-web1` и удалён из монорепы.
 
 ### umbrella-agent
 
@@ -227,6 +227,8 @@ Python/FastAPI-сервис, отдельный от сервера филиал
 | `groups:write` | ✓ | ✓ | |
 | `policies:read` | ✓ | ✓ | ✓ |
 | `policies:write` | ✓ | ✓ | |
+| `commands:read` | ✓ | ✓ | ✓ |
+| `commands:write` | ✓ | ✓ | |
 
 ### Агенты
 
@@ -332,18 +334,23 @@ location /v1/agent/ {
 | `policies` | policies | Политики фильтрации |
 | `services` | policies | Именованные сервисы (наборы правил) |
 | `policy_services` | policies | M2M: policy ↔ service |
+| `policy_group_assignments` | policies | M2M: policy ↔ group (с assigned_at, assigned_by_id) |
+| `policy_agent_assignments` | policies | M2M: policy ↔ agent (с assigned_at, assigned_by_id) |
+| `commands` | commands | Команды, отправленные агентам |
 
 ### Модели
 
 **Admin** — `email`, `password_hash`, `full_name`, `role` (superadmin/admin/viewer), `is_active`, `last_login_at`, `avatar_url`. Unique-индекс по `email` только среди активных (soft-delete).
 
-**Agent** — `hostname`, `os` (windows/linux/macos), `status` (pending/active/inactive/revoked), `enrollment_token_hash`, `enrollment_token_expires_at`, `notes`, `last_seen_at`, `version`, `cert_serial`, `cert_expires_at`.
+**Agent** — `hostname`, `os` (windows/linux/macos), `os_version`, `agent_version`, `ip_address`, `status` (pending/active/disabled/decommissioned), `enrollment_token_hash`, `enrollment_token_expires_at`, `agent_token_hash`, `cert_serial`, `cert_expires_at`, `notes`, `last_seen_at`, `enrolled_at`.
 
 **Group** — `name` (unique среди активных), `description`, `color`. Связь с агентами через `agent_group_memberships`.
 
-**Policy** — `name`, `description`, `kind` (traffic/process), `source` (local/global), `action` (block/allow), `is_active`, `overridable` (bool), `version` (int), `hq_policy_id` (UUID, nullable), `custom_rules` (JSONB — список правил вида `{type, value}`). Связь с сервисами через `policy_services`.
+**Policy** — `name`, `description`, `kind` (traffic/process), `source` (local/global), `action` (block/allow), `is_active`, `is_global` (bool — флаг глобальной политики), `overridable` (bool), `version` (int), `hq_policy_id` (UUID, nullable), `custom_rules` (JSONB — список правил вида `{type, value}`). Связь с сервисами через `policy_services`, с группами через `policy_group_assignments`, с агентами через `policy_agent_assignments`.
 
 **Service** — `name`, `category`, `description`, `kind` (traffic/process), `source` (local/global), `is_active`, `rules` (JSONB — список `{type, value}`). Именованная группа правил, переиспользуемая в нескольких политиках одного вида.
+
+**Command** — `agent_id` (FK), `issued_by_id` (FK admin, nullable), `type` (reboot/collect_diagnostics/update_self/apply_config), `status` (pending/sent/acknowledged/success/failure/timeout), `payload` (JSON, nullable), `result` (JSON, nullable), `error_message`, `sent_at`, `acknowledged_at`, `completed_at`, `expires_at`.
 
 **PolicyKind** — enum: `traffic` | `process`.
 
@@ -406,6 +413,11 @@ location /v1/agent/ {
 - `GET /v1/services/{id}` — детали (`policies:read`)
 - `PATCH /v1/services/{id}` — обновить (`policies:write`)
 - `DELETE /v1/services/{id}` — soft-delete (`policies:write`)
+
+### Commands `/v1/agents/{agent_id}/commands`
+- `POST /v1/agents/{agent_id}/commands` — выдать команду агенту (`commands:write`)
+- `GET /v1/agents/{agent_id}/commands` — список команд агента (`commands:read`)
+- `GET /v1/agents/{agent_id}/commands/{command_id}` — детали команды (`commands:read`)
 
 ### Agent API `/v1/agent` (только через nginx :8443, mTLS)
 - `POST /v1/agent/enroll` — enrollment (Bearer token из тела, без cert)
@@ -504,18 +516,18 @@ Prometheus + Grafana, хостится в HQ. Серверы филиалов в
 1. **`instance`** — конфиг инстанса (BranchConfig, ensure_instance при старте).
 2. **`agents`** — CRUD, enrollment-токен, heartbeat, cert renewal, фильтрация.
 3. **`groups`** — группировка агентов, batch-добавление.
-4. **`policies`** — политики с kind/source/action/version + сервисы (M2M).
+4. **`policies`** — политики с kind/source/action/version + сервисы (M2M) + таргетинг на группы и агентов через `policy_group_assignments` / `policy_agent_assignments`.
 5. **umbrella-agent TUI** — raw-mode guided wizard, verify screen, logs, service install; enrollment flow без cooked-mode.
 6. **mTLS end-to-end** — Branch CA, enrollment, cert rotation, nginx config, `SetClientCert` с system root CAs + Branch CA.
 7. **`BranchCA.sign_server_cert()`** — генерация TLS-сертификата nginx от Branch CA.
+8. **`commands` Фаза 1** — серверная сторона: модели, очередь команд (reboot/collect_diagnostics/update_self/apply_config), dispatch, сбор результатов; API вложен под `/v1/agents/{agent_id}/commands`.
 
 ### Следующие шаги
 
 **Ближайшее (пилотный запуск):**
 
 - [ ] **Проверить e2e на реальном агенте** — heartbeat, poll команд, cert renewal на Windows endpoint.
-- [ ] **`commands` Фаза 1** — серверная сторона: очередь команд, dispatch, сбор результатов. Агентская сторона: executor уже есть (`reboot`, базовые команды).
-- [ ] **`agents` статус** — автоматическое переключение `active`/`inactive` по `last_seen_at` (heartbeat > N минут → inactive).
+- [ ] **`agents` статус** — автоматическое переключение `active`/`disabled` по `last_seen_at` (heartbeat > N минут → disabled).
 - [ ] **Пилотный деплой** — 1–2 реальных филиала, 10–20 endpoint'ов.
 
 **После пилота:**
