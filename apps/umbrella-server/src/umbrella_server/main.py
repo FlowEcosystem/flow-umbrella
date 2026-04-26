@@ -1,5 +1,6 @@
 """Точка входа FastAPI-приложения."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,11 +10,12 @@ from dishka.integrations.fastapi import setup_dishka
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from umbrella_server.core.config import get_settings
+from umbrella_server.core.config import Settings, get_settings
 from umbrella_server.core.logging import configure_logging, get_logger
 from umbrella_server.di import build_container
 from umbrella_server.middleware.exception_handlers import register_exception_handlers
 from umbrella_server.domains.instance.bootstrap import ensure_instance
+from umbrella_server.domains.agents.repository import AgentRepository
 from umbrella_server.pki import BranchCA
 
 from umbrella_server.domains.auth.routers import admins_router, auth_router
@@ -22,6 +24,28 @@ from umbrella_server.domains.agents.routers import agents_router, agent_router
 from umbrella_server.domains.groups.routers import groups_router
 from umbrella_server.domains.policies.routers import policies_router, services_router
 from umbrella_server.domains.commands.routers import commands_router
+from umbrella_server.domains.metrics.routers import metrics_router
+
+
+async def _stale_agent_loop(
+    factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    """Фоновая задача: каждые 15 с переводит молчащих агентов в disabled."""
+    logger = get_logger("stale_agent_checker")
+    from datetime import UTC, datetime, timedelta
+    while True:
+        await asyncio.sleep(15)
+        try:
+            async with factory() as session:
+                repo = AgentRepository(session)
+                cutoff = datetime.now(UTC) - timedelta(seconds=settings.agent_offline_timeout_sec)
+                count = await repo.mark_stale_offline(cutoff)
+                if count:
+                    await session.commit()
+                    logger.info("agents_marked_offline", count=count)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("stale_agent_check_failed", error=str(exc))
 
 
 @asynccontextmanager
@@ -49,7 +73,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.warning("pki_not_configured", hint="Set SERVER_PKI_CA_CERT_PATH and SERVER_PKI_CA_KEY_PATH")
 
+    stale_task = asyncio.create_task(
+        _stale_agent_loop(factory, settings),
+        name="stale_agent_checker",
+    )
+
     yield
+
+    stale_task.cancel()
+    try:
+        await stale_task
+    except asyncio.CancelledError:
+        pass
 
     logger.info("app_shutting_down")
     await app.state.dishka_container.close()
@@ -91,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(policies_router)
     app.include_router(services_router)
     app.include_router(commands_router)
+    app.include_router(metrics_router)
 
     return app
 

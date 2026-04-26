@@ -15,6 +15,7 @@ import (
 	"github.com/flow-ecosystem/umbrella-agent/internal/commands"
 	"github.com/flow-ecosystem/umbrella-agent/internal/config"
 	"github.com/flow-ecosystem/umbrella-agent/internal/enforce"
+	"github.com/flow-ecosystem/umbrella-agent/internal/metrics"
 	"github.com/flow-ecosystem/umbrella-agent/internal/pki"
 	"github.com/flow-ecosystem/umbrella-agent/internal/state"
 )
@@ -99,6 +100,10 @@ func (a *Agent) Enroll() error {
 		a.cfg.PolicyPollIntervalSec = resp.PolicyPollIntervalSec
 		a.state.PolicyPollIntervalSec = resp.PolicyPollIntervalSec
 	}
+	if resp.MetricsPushIntervalSec > 0 {
+		a.cfg.MetricsPushIntervalSec = resp.MetricsPushIntervalSec
+		a.state.MetricsPushIntervalSec = resp.MetricsPushIntervalSec
+	}
 
 	a.client.SetToken(resp.AgentToken)
 
@@ -138,10 +143,14 @@ func (a *Agent) Run(done <-chan struct{}) {
 	if a.state.PolicyPollIntervalSec > 0 {
 		a.cfg.PolicyPollIntervalSec = a.state.PolicyPollIntervalSec
 	}
+	if a.state.MetricsPushIntervalSec > 0 {
+		a.cfg.MetricsPushIntervalSec = a.state.MetricsPushIntervalSec
+	}
 
 	heartbeat := time.Duration(a.cfg.HeartbeatIntervalSec) * time.Second
 	cmdPoll := time.Duration(a.cfg.CommandPollIntervalSec) * time.Second
 	policyPoll := time.Duration(a.cfg.PolicyPollIntervalSec) * time.Second
+	metricsPush := time.Duration(a.cfg.MetricsPushIntervalSec) * time.Second
 	certCheck := 6 * time.Hour
 
 	a.log.Info("agent running",
@@ -154,14 +163,17 @@ func (a *Agent) Run(done <-chan struct{}) {
 	a.doHeartbeat()
 	a.doCommandPoll()
 	a.doPolicyPoll()
+	a.doMetricsPush()
 
 	heartbeatTick := time.NewTicker(heartbeat)
 	cmdTick := time.NewTicker(cmdPoll)
 	policyTick := time.NewTicker(policyPoll)
+	metricsTick := time.NewTicker(metricsPush)
 	certTick := time.NewTicker(certCheck)
 	defer heartbeatTick.Stop()
 	defer cmdTick.Stop()
 	defer policyTick.Stop()
+	defer metricsTick.Stop()
 	defer certTick.Stop()
 
 	for {
@@ -176,6 +188,8 @@ func (a *Agent) Run(done <-chan struct{}) {
 			a.doCommandPoll()
 		case <-policyTick.C:
 			a.doPolicyPoll()
+		case <-metricsTick.C:
+			a.doMetricsPush()
 		case <-certTick.C:
 			a.doCertCheck()
 		}
@@ -357,6 +371,29 @@ func (a *Agent) doCertCheck() {
 	}
 
 	a.log.Info("certificate renewed", "new_expires_at", resp.CertExpiresAt.Format(time.RFC3339))
+}
+
+// ── Metrics push ─────────────────────────────────────────────────────────────
+
+func (a *Agent) doMetricsPush() {
+	snap, err := metrics.Collect()
+	if err != nil {
+		a.log.Warn("metrics collection failed", "err", err)
+		return
+	}
+	err = a.client.PushMetrics(api.MetricsRequest{
+		CollectedAt: snap.CollectedAt,
+		CPUPercent:  snap.CPUPercent,
+		RAMUsedMB:   snap.RAMUsedMB,
+		RAMTotalMB:  snap.RAMTotalMB,
+		DiskUsedGB:  snap.DiskUsedGB,
+		DiskTotalGB: snap.DiskTotalGB,
+	})
+	if err != nil {
+		a.log.Warn("metrics push failed", "err", err)
+		return
+	}
+	a.log.Debug("metrics pushed", "cpu", snap.CPUPercent, "ram_used_mb", snap.RAMUsedMB)
 }
 
 // ── OS helpers ───────────────────────────────────────────────────────────────

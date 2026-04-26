@@ -16,6 +16,7 @@ type Config struct {
 	HeartbeatIntervalSec   int    `json:"heartbeat_interval_sec"`
 	CommandPollIntervalSec int    `json:"command_poll_interval_sec"`
 	PolicyPollIntervalSec  int    `json:"policy_poll_interval_sec"`
+	MetricsPushIntervalSec int    `json:"metrics_push_interval_sec"`
 	CertRenewBeforeDays    int    `json:"cert_renew_before_days"`
 	AgentVersion           string `json:"agent_version"`
 	// InsecureSkipVerify skips TLS verification — dev only.
@@ -65,6 +66,7 @@ func defaults() Config {
 		HeartbeatIntervalSec:   30,
 		CommandPollIntervalSec: 10,
 		PolicyPollIntervalSec:  60,
+		MetricsPushIntervalSec: 60,
 		CertRenewBeforeDays:    7,
 		AgentVersion:           "0.1.0",
 	}

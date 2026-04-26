@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     policy_poll_interval_sec: int = 60
     command_poll_interval_sec: int = 15
     metrics_push_interval_sec: int = 60
+    # Сколько секунд без heartbeat → статус агента переходит в disabled.
+    # По умолчанию 45 с = 3× heartbeat-интервал (15 с).
+    agent_offline_timeout_sec: int = 45
 
     # --- auth ---
     jwt_algorithm: str = "HS256"

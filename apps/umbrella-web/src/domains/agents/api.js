@@ -12,4 +12,5 @@ export const agentsApi = {
   listCommands:             (id)     => http.get(`/v1/agents/${id}/commands`).then(r => r.data),
   issueCommand:             (id, data) => http.post(`/v1/agents/${id}/commands`, data).then(r => r.data),
   generateDecommissionToken:(id)     => http.post(`/v1/agents/${id}/decommission-token`).then(r => r.data),
+  getMetrics:               (id, limit = 60) => http.get(`/v1/agents/${id}/metrics`, { params: { limit } }).then(r => r.data),
 }

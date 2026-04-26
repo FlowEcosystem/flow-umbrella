@@ -147,7 +147,17 @@ type EnrollResponse struct {
 	CertExpiresAt          time.Time `json:"cert_expires_at"`
 	PolicyPollIntervalSec  int       `json:"policy_poll_interval_sec"`
 	CommandPollIntervalSec int       `json:"command_poll_interval_sec"`
+	MetricsPushIntervalSec int       `json:"metrics_push_interval_sec"`
 	DecommissionPubkey     string    `json:"decommission_pubkey"`
+}
+
+type MetricsRequest struct {
+	CollectedAt time.Time `json:"collected_at"`
+	CPUPercent  float64   `json:"cpu_percent"`
+	RAMUsedMB   int64     `json:"ram_used_mb"`
+	RAMTotalMB  int64     `json:"ram_total_mb"`
+	DiskUsedGB  float64   `json:"disk_used_gb"`
+	DiskTotalGB float64   `json:"disk_total_gb"`
 }
 
 type HeartbeatRequest struct {
@@ -216,4 +226,8 @@ func (c *Client) GetPolicies() ([]Policy, error) {
 func (c *Client) RenewCert(req RenewRequest) (RenewResponse, error) {
 	var resp RenewResponse
 	return resp, c.post("/v1/agent/renew", req, &resp)
+}
+
+func (c *Client) PushMetrics(req MetricsRequest) error {
+	return c.post("/v1/agent/metrics", req, nil)
 }

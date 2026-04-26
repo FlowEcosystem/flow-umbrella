@@ -85,6 +85,7 @@ class AgentEnrollResponse(BaseModel):
     cert_expires_at: datetime
     policy_poll_interval_sec: int
     command_poll_interval_sec: int
+    metrics_push_interval_sec: int
     # PEM-публичный ключ для верификации offline-токенов деинсталляции.
     # None если сервер не настроен (SERVER_DECOMMISSION_KEY_PATH не задан).
     decommission_pubkey: str | None = None

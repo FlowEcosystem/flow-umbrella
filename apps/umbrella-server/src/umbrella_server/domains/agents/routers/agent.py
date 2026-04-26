@@ -23,6 +23,8 @@ from umbrella_server.domains.commands.schemas import AgentCommandItem, AgentComm
 from umbrella_server.domains.commands.service import CommandService
 from umbrella_server.domains.policies.schemas import AgentPolicyItem
 from umbrella_server.domains.policies.service import PolicyService
+from umbrella_server.domains.metrics.schemas import AgentMetricPush
+from umbrella_server.domains.metrics.service import MetricsService
 
 agent_router = APIRouter(prefix="/v1/agent", tags=["agent"])
 
@@ -56,6 +58,7 @@ async def enroll(
         cert_expires_at=agent.cert_expires_at,  # type: ignore[arg-type]
         policy_poll_interval_sec=settings.policy_poll_interval_sec,
         command_poll_interval_sec=settings.command_poll_interval_sec,
+        metrics_push_interval_sec=settings.metrics_push_interval_sec,
         decommission_pubkey=decommission_key.public_key_pem() if decommission_key else None,
     )
 
@@ -141,3 +144,13 @@ async def get_agent_policies(
             rules=all_rules,
         ))
     return result
+
+
+@agent_router.post("/metrics", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def push_metrics(
+    payload: AgentMetricPush,
+    agent: Annotated[Agent, Depends(current_agent)],
+    metrics_service: FromDishka[MetricsService],
+) -> None:
+    await metrics_service.push(agent, payload)

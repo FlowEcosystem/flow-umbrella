@@ -77,9 +77,31 @@ export function useAgentDetailPage(id) {
     } catch { /* silent */ }
   }
 
+  // ── metrics ────────────────────────────────────────────────
+  const metricsHistory  = ref([])
+  const metricsLoading  = ref(false)
+
+  const latestMetric = computed(() => metricsHistory.value[0] ?? null)
+
+  function metricPct(used, total) {
+    if (!total) return 0
+    return Math.round((used / total) * 100)
+  }
+
+  async function fetchMetrics() {
+    metricsLoading.value = true
+    try {
+      metricsHistory.value = await agentsApi.getMetrics(id, 60)
+    } catch {
+      metricsHistory.value = []
+    } finally {
+      metricsLoading.value = false
+    }
+  }
+
   onMounted(async () => {
     await fetchAgent()
-    await Promise.all([fetchGroups(), fetchPolicies(), fetchCommands()])
+    await Promise.all([fetchGroups(), fetchPolicies(), fetchCommands(), fetchMetrics()])
     if (!groupsStore.items.length) groupsStore.fetch()
   })
 
@@ -354,5 +376,6 @@ export function useAgentDetailPage(id) {
     deleteOpen, deleteLoading, confirmDelete,
     COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
     cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand, fetchCommands,
+    metricsHistory, metricsLoading, latestMetric, metricPct,
   }
 }

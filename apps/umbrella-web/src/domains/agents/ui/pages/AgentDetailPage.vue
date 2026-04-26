@@ -3,7 +3,7 @@ import {
   ArrowLeft, Pencil, KeyRound, Trash2,
   Monitor, Clock, Calendar, Hash, FileText, Layers,
   Plus, X, Search, Loader2, ShieldCheck, ShieldOff, Globe,
-  Terminal, RefreshCw, ShieldAlert, PowerOff,
+  Terminal, RefreshCw, ShieldAlert, PowerOff, Cpu, MemoryStick, HardDrive,
 } from 'lucide-vue-next'
 import { useAgentDetailPage }      from '@/domains/agents/useAgentDetailPage'
 import { usePermissions }          from '@/shared/composables/usePermissions'
@@ -35,6 +35,7 @@ const {
   offlineTokenOpen, offlineTokenData, offlineTokenLoading, offlineTokenCopied,
   generateOfflineToken, copyOfflineToken,
   decommissionOpen, decommissionLoading, confirmDecommission,
+  metricsHistory, metricsLoading, latestMetric, metricPct,
 } = useAgentDetailPage(id)
 
 const { canWrite } = usePermissions()
@@ -170,6 +171,84 @@ const { canWrite } = usePermissions()
           <p class="text-sm text-fg">{{ formatDate(displayAgent.enrolled_at ?? displayAgent.created_at) }}</p>
         </div>
 
+      </div>
+
+      <!-- metrics -->
+      <div class="bg-bg-raised border border-white/[0.06] rounded-xl overflow-hidden mb-5">
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-white/[0.05]">
+          <Cpu :size="13" class="text-fg-subtle/60" />
+          <span class="text-xs text-fg-subtle uppercase tracking-wider">Ресурсы</span>
+          <span v-if="latestMetric" class="text-xs text-fg-subtle/40 ml-auto">
+            {{ formatDate(latestMetric.collected_at) }}
+          </span>
+        </div>
+
+        <div v-if="metricsLoading && !latestMetric" class="grid grid-cols-3 gap-px bg-white/[0.04]">
+          <div v-for="i in 3" :key="i" class="bg-bg-raised px-4 py-4">
+            <Skeleton class="h-3 w-16 rounded mb-3 bg-white/[0.06]" />
+            <Skeleton class="h-1.5 w-full rounded-full bg-white/[0.05]" />
+          </div>
+        </div>
+
+        <div v-else-if="!latestMetric" class="flex items-center justify-center py-7">
+          <p class="text-xs text-fg-subtle/60">Метрики ещё не получены</p>
+        </div>
+
+        <div v-else class="grid grid-cols-3 divide-x divide-white/[0.04]">
+
+          <!-- CPU -->
+          <div class="px-4 py-4">
+            <div class="flex items-center gap-1.5 mb-2">
+              <Cpu :size="11" class="text-fg-subtle/50" />
+              <span class="text-xs text-fg-subtle/70 uppercase tracking-wider">CPU</span>
+              <span class="text-sm text-fg font-mono ml-auto tabular-nums">
+                {{ latestMetric.cpu_percent != null ? latestMetric.cpu_percent.toFixed(1) + '%' : '—' }}
+              </span>
+            </div>
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500"
+                   :class="latestMetric.cpu_percent > 80 ? 'bg-red-400' : latestMetric.cpu_percent > 50 ? 'bg-amber-400' : 'bg-emerald-400'"
+                   :style="{ width: (latestMetric.cpu_percent ?? 0) + '%' }" />
+            </div>
+          </div>
+
+          <!-- RAM -->
+          <div class="px-4 py-4">
+            <div class="flex items-center gap-1.5 mb-2">
+              <MemoryStick :size="11" class="text-fg-subtle/50" />
+              <span class="text-xs text-fg-subtle/70 uppercase tracking-wider">RAM</span>
+              <span class="text-sm text-fg font-mono ml-auto tabular-nums">
+                {{ latestMetric.ram_total_mb ? metricPct(latestMetric.ram_used_mb, latestMetric.ram_total_mb) + '%' : '—' }}
+              </span>
+            </div>
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500 bg-sky-400"
+                   :style="{ width: metricPct(latestMetric.ram_used_mb, latestMetric.ram_total_mb) + '%' }" />
+            </div>
+            <p v-if="latestMetric.ram_total_mb" class="text-xs text-fg-subtle/40 mt-1 tabular-nums">
+              {{ Math.round(latestMetric.ram_used_mb / 1024) }} / {{ Math.round(latestMetric.ram_total_mb / 1024) }} ГБ
+            </p>
+          </div>
+
+          <!-- Disk -->
+          <div class="px-4 py-4">
+            <div class="flex items-center gap-1.5 mb-2">
+              <HardDrive :size="11" class="text-fg-subtle/50" />
+              <span class="text-xs text-fg-subtle/70 uppercase tracking-wider">Диск</span>
+              <span class="text-sm text-fg font-mono ml-auto tabular-nums">
+                {{ latestMetric.disk_total_gb ? metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) + '%' : '—' }}
+              </span>
+            </div>
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500"
+                   :class="metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) > 90 ? 'bg-red-400' : 'bg-violet-400'"
+                   :style="{ width: metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) + '%' }" />
+            </div>
+            <p v-if="latestMetric.disk_total_gb" class="text-xs text-fg-subtle/40 mt-1 tabular-nums">
+              {{ latestMetric.disk_used_gb.toFixed(0) }} / {{ latestMetric.disk_total_gb.toFixed(0) }} ГБ
+            </p>
+          </div>
+        </div>
       </div>
 
       <!-- notes -->

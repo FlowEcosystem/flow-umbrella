@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from umbrella_server.domains.agents.models import Agent, AgentOS, AgentStatus
@@ -33,9 +33,27 @@ class AgentRepository:
     async def get_by_agent_token_hash(self, token_hash: str) -> Agent | None:
         stmt = self._active_agents().where(
             Agent.agent_token_hash == token_hash,
-            Agent.status == AgentStatus.ACTIVE,
+            Agent.status.in_([AgentStatus.ACTIVE, AgentStatus.DISABLED]),
         )
         return await self._session.scalar(stmt)
+
+    async def mark_stale_offline(self, cutoff: datetime) -> int:
+        """Переводит ACTIVE-агентов без heartbeat с момента cutoff в DISABLED.
+
+        Возвращает количество затронутых строк.
+        """
+        stmt = (
+            update(Agent)
+            .where(
+                Agent.status == AgentStatus.ACTIVE,
+                Agent.last_seen_at.is_not(None),
+                Agent.last_seen_at < cutoff,
+                Agent.deleted_at.is_(None),
+            )
+            .values(status=AgentStatus.DISABLED)
+        )
+        result = await self._session.execute(stmt)
+        return result.rowcount
 
     async def create(
         self,

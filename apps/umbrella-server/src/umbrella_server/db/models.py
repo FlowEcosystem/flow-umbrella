@@ -10,6 +10,7 @@ from umbrella_server.domains.policies.models import (
     Service, policy_services, policy_group_assignments, policy_agent_assignments,
 )
 from umbrella_server.domains.commands.models import Command, CommandType, CommandStatus
+from umbrella_server.domains.metrics.models import AgentMetric
 
 __all__ = [
     "Base", "Admin", "RefreshToken", "BranchConfig",
@@ -18,4 +19,5 @@ __all__ = [
     "Policy", "PolicyAction", "PolicyKind", "PolicySource", "PolicyRuleType",
     "Service", "policy_services", "policy_group_assignments", "policy_agent_assignments",
     "Command", "CommandType", "CommandStatus",
+    "AgentMetric",
 ]

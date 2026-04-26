@@ -201,6 +201,9 @@ class AgentService:
         ip_address: str | None = None,
     ) -> Agent:
         fields: dict = {"last_seen_at": datetime.now(UTC)}
+        if agent.status == AgentStatus.DISABLED:
+            fields["status"] = AgentStatus.ACTIVE
+            logger.info("agent_reactivated", agent_id=str(agent.id))
         if os_version is not None:
             fields["os_version"] = os_version
         if agent_version is not None:
@@ -211,10 +214,26 @@ class AgentService:
         await self._session.commit()
         return agent
 
+    async def mark_stale_offline(self) -> int:
+        """Переводит ACTIVE-агентов без свежего heartbeat в DISABLED.
+
+        Порог берётся из настроек (agent_offline_timeout_sec).
+        Возвращает количество переведённых агентов.
+        """
+        cutoff = datetime.now(UTC) - timedelta(seconds=self._settings.agent_offline_timeout_sec)
+        count = await self._repo.mark_stale_offline(cutoff)
+        if count:
+            await self._session.commit()
+        return count
+
     async def authenticate_by_cert(self, agent_id: UUID) -> Agent:
-        """Для mTLS-режима: находит агента по ID из cert CN, проверяет ACTIVE."""
+        """Для mTLS-режима: находит агента по ID из cert CN.
+
+        Принимает ACTIVE и DISABLED — disabled-агент может прислать heartbeat
+        и автоматически реактивироваться. PENDING/DECOMMISSIONED отклоняются.
+        """
         agent = await self._repo.get_by_id(agent_id)
-        if agent is None or agent.status != AgentStatus.ACTIVE:
+        if agent is None or agent.status not in (AgentStatus.ACTIVE, AgentStatus.DISABLED):
             raise AgentTokenInvalidError()
         return agent
 

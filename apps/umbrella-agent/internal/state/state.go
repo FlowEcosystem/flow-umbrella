@@ -20,6 +20,7 @@ type State struct {
 	// Server-negotiated poll intervals (0 = not set, use config defaults).
 	CommandPollIntervalSec int `json:"command_poll_interval_sec,omitempty"`
 	PolicyPollIntervalSec  int `json:"policy_poll_interval_sec,omitempty"`
+	MetricsPushIntervalSec int `json:"metrics_push_interval_sec,omitempty"`
 
 	// Last successful heartbeat time — written by the agent loop, read by monitor.
 	LastHeartbeatAt *time.Time `json:"last_heartbeat_at,omitempty"`
