@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/flow-ecosystem/umbrella-agent/internal/config"
+	"github.com/flow-ecosystem/umbrella-agent/internal/enforce"
 	"github.com/flow-ecosystem/umbrella-agent/internal/state"
 )
 
@@ -91,7 +92,7 @@ func doMonitor(cfgFile string) {
 // renderDashboard prints the status dashboard.
 // ansi=true enables colours and in-place screen refresh.
 // hint is the footer help line (caller-supplied so TUI can show "back" instead of "quit").
-func renderDashboard(cfg config.Config, s *state.State, svcSt string, ansi bool, hint string) {
+func renderDashboard(cfg config.Config, s *state.State, svcSt string, ansi bool, hint string) { //nolint:cyclop
 	now := time.Now()
 
 	clr := func(code, text string) string {
@@ -192,6 +193,79 @@ func renderDashboard(cfg config.Config, s *state.State, svcSt string, ansi bool,
 	fmt.Printf("    Commands:    every %ds\n", cmdSec)
 	fmt.Printf("    Policies:    every %ds\n", polSec)
 	fmt.Printf("    Heartbeat:   every %ds\n", cfg.HeartbeatIntervalSec)
+	fmt.Println()
+
+	// ── Enforcement ──────────────────────────────────────────
+	fmt.Printf("  %s\n", clr("1", "ENFORCEMENT"))
+	es, _ := enforce.LoadEnforcementStatus(cfg.StateFile)
+	if es == nil {
+		fmt.Printf("    %s\n", clr("33", "нет данных"))
+	} else {
+		if es.DNSSinkhole {
+			fmt.Printf("    DNS синкхол: %s  (%d доменов)\n",
+				clr("32", "● active"), es.BlockedDomains)
+		} else {
+			fmt.Printf("    DNS синкхол: %s\n", clr("2", "○ inactive"))
+		}
+		if es.WFPFilters > 0 {
+			fmt.Printf("    WFP фильтры: %s  (%d IP)\n",
+				clr("32", "● active"), es.BlockedIPs)
+		} else {
+			fmt.Printf("    WFP фильтры: %s\n", clr("2", "○ inactive"))
+		}
+		fmt.Printf("    Обновлено:   %s (%s назад)\n",
+			es.UpdatedAt.Local().Format("15:04:05"),
+			humanDur(time.Since(es.UpdatedAt)))
+	}
+	fmt.Println()
+
+	// ── Policies ─────────────────────────────────────────────
+	fmt.Printf("  %s\n", clr("1", "ПОЛИТИКИ"))
+	ps, psErr := enforce.LoadState(cfg.StateFile)
+	switch {
+	case psErr != nil:
+		fmt.Printf("    %s\n", clr("31", "Ошибка чтения: "+psErr.Error()))
+		fmt.Printf("    %s\n", clr("2", enforce.PolicyStatePath(cfg.StateFile)))
+	case ps == nil:
+		fmt.Printf("    %s\n", clr("33", "нет данных — агент ещё не опросил сервер"))
+		fmt.Printf("    %s\n", clr("2", enforce.PolicyStatePath(cfg.StateFile)))
+	case len(ps.Policies) == 0:
+		age := time.Since(ps.AppliedAt)
+		fmt.Printf("    Обновлено: %s (%s назад)\n",
+			ps.AppliedAt.Local().Format("15:04:05"), humanDur(age))
+		fmt.Printf("    %s\n", clr("2", "политик нет"))
+	default:
+		age := time.Since(ps.AppliedAt)
+		fmt.Printf("    Обновлено: %s (%s назад)   всего: %d\n",
+			ps.AppliedAt.Local().Format("15:04:05"), humanDur(age), len(ps.Policies))
+		for _, p := range ps.Policies {
+			var badge string
+			if p.Action == "block" {
+				badge = clr("31", "✗ block")
+			} else {
+				badge = clr("32", "✓ allow")
+			}
+			name := p.Name
+			if name == "" {
+				name = p.ID
+			}
+			var parts []string
+			if p.Domains > 0 {
+				parts = append(parts, fmt.Sprintf("%d dom", p.Domains))
+			}
+			if p.IPs > 0 {
+				parts = append(parts, fmt.Sprintf("%d ip", p.IPs))
+			}
+			if p.Processes > 0 {
+				parts = append(parts, fmt.Sprintf("%d proc", p.Processes))
+			}
+			rulesStr := ""
+			if len(parts) > 0 {
+				rulesStr = "  " + clr("2", strings.Join(parts, " · "))
+			}
+			fmt.Printf("    %s  %-28s%s\n", badge, name, rulesStr)
+		}
+	}
 	fmt.Println()
 
 	fmt.Println(sep)

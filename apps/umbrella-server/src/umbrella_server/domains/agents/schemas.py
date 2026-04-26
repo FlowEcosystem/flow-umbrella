@@ -50,6 +50,12 @@ class AgentCreateResponse(BaseModel):
     enrollment_token_expires_at: datetime
 
 
+class AgentDecommissionTokenResponse(BaseModel):
+    """Offline-токен для деинсталляции агента без обращения к серверу."""
+    token: str
+    expires_at: datetime
+
+
 class AgentFilter(BaseModel):
     """Query-параметры list-endpoint'а. Используется через Depends()."""
     status: list[AgentStatus] | None = None
@@ -79,6 +85,9 @@ class AgentEnrollResponse(BaseModel):
     cert_expires_at: datetime
     policy_poll_interval_sec: int
     command_poll_interval_sec: int
+    # PEM-публичный ключ для верификации offline-токенов деинсталляции.
+    # None если сервер не настроен (SERVER_DECOMMISSION_KEY_PATH не задан).
+    decommission_pubkey: str | None = None
 
 
 class AgentHeartbeatRequest(BaseModel):

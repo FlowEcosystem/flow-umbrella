@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # --- PKI ---
     pki_ca_cert_path: Path | None = None
     pki_ca_key_path: Path | None = None
+    # ECDSA P-256 ключ для offline-токенов деинсталляции. Генерируется автоматически
+    # при первом запуске, если файл не существует.
+    decommission_key_path: Path | None = None
 
     # --- agent intervals ---
     policy_poll_interval_sec: int = 60

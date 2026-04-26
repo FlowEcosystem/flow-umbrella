@@ -81,7 +81,7 @@ export function useDashboardPage() {
   // ── greeting ──────────────────────────────────────────────
   const greeting = computed(() => {
     const h    = new Date().getHours()
-    const name = auth.currentUser?.full_name?.split(' ')[0] ?? ''
+    const name = auth.currentUser?.full_name?.split(' ')[1] ?? ''
     const base = h < 6 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер'
     return name ? `${base}, ${name}` : base
   })

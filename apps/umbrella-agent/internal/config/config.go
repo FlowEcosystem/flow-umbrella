@@ -12,6 +12,7 @@ type Config struct {
 	ServerURL              string `json:"server_url"`
 	EnrollmentToken        string `json:"enrollment_token"`
 	StateFile              string `json:"state_file"`
+	LogFile                string `json:"log_file"`
 	HeartbeatIntervalSec   int    `json:"heartbeat_interval_sec"`
 	CommandPollIntervalSec int    `json:"command_poll_interval_sec"`
 	PolicyPollIntervalSec  int    `json:"policy_poll_interval_sec"`
@@ -32,6 +33,17 @@ func DefaultStateFile() string {
 	return "/var/lib/umbrella-agent/state.json"
 }
 
+func DefaultLogFile() string {
+	if runtime.GOOS == "windows" {
+		pd := os.Getenv("PROGRAMDATA")
+		if pd == "" {
+			pd = `C:\ProgramData`
+		}
+		return filepath.Join(pd, "UmbrellaAgent", "umbrella-agent.log")
+	}
+	return "/var/log/umbrella-agent.log"
+}
+
 // DefaultConfigFile returns the platform config path.
 // Windows: %PROGRAMDATA%\UmbrellaAgent\config.json
 // Linux:   /etc/umbrella-agent/config.json
@@ -49,6 +61,7 @@ func DefaultConfigFile() string {
 func defaults() Config {
 	return Config{
 		StateFile:              DefaultStateFile(),
+		LogFile:                DefaultLogFile(),
 		HeartbeatIntervalSec:   30,
 		CommandPollIntervalSec: 10,
 		PolicyPollIntervalSec:  60,

@@ -16,6 +16,8 @@ class CommandType(str, enum.Enum):
     COLLECT_DIAGNOSTICS = "collect_diagnostics"
     UPDATE_SELF = "update_self"
     APPLY_CONFIG = "apply_config"
+    SYNC_POLICIES = "sync_policies"
+    DECOMMISSION = "decommission"
 
 
 class CommandStatus(str, enum.Enum):

@@ -10,6 +10,7 @@ from umbrella_server.core.pagination import Page, PaginationMeta, PaginationPara
 from umbrella_server.domains.agents.schemas import (
     AgentCreate,
     AgentCreateResponse,
+    AgentDecommissionTokenResponse,
     AgentFilter,
     AgentRead,
     AgentUpdate,
@@ -147,6 +148,21 @@ async def list_agent_policies(
             rules_count=service_rules_count + len(p.custom_rules or []),
         ))
     return result
+
+
+@agents_router.post(
+    "/{agent_id}/decommission-token",
+    response_model=AgentDecommissionTokenResponse,
+)
+@inject
+async def get_decommission_token(
+    agent_id: UUID,
+    _current: Annotated[Admin, Depends(require_capability("agents:write"))],
+    service: FromDishka[AgentService],
+) -> AgentDecommissionTokenResponse:
+    agent = await service.get(agent_id)
+    token, expires_at = service.generate_decommission_token(agent)
+    return AgentDecommissionTokenResponse(token=token, expires_at=expires_at)
 
 
 @agents_router.post(

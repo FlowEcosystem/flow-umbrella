@@ -61,6 +61,7 @@ const pageTitle = computed(() => {
 </script>
 
 <template>
+  <TooltipProvider :delay-duration="400">
   <div class="flex h-screen bg-bg overflow-hidden">
 
     <!-- sidebar -->
@@ -179,6 +180,7 @@ const pageTitle = computed(() => {
 
     </div>
   </div>
+  </TooltipProvider>
 
   <UiToastContainer />
 

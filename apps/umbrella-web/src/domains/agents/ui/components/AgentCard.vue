@@ -68,18 +68,33 @@ const { canWrite } = usePermissions()
                 border-t border-white/[0.06] bg-bg-raised z-10
                 translate-y-full group-hover:translate-y-0
                 transition-transform duration-150">
-      <button @click.stop="$emit('edit', agent)" title="Редактировать"
-              class="p-1.5 rounded text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors">
-        <Pencil :size="13" />
-      </button>
-      <button @click.stop="$emit('regen', agent)" title="Enrollment token"
-              class="p-1.5 rounded text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors">
-        <KeyRound :size="13" />
-      </button>
-      <button @click.stop="$emit('delete', agent)" title="Удалить"
-              class="p-1.5 rounded text-fg-subtle hover:text-red-400 hover:bg-red-950/30 transition-colors">
-        <Trash2 :size="13" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button @click.stop="$emit('edit', agent)"
+                  class="p-1.5 rounded text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors">
+            <Pencil :size="13" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Редактировать</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button @click.stop="$emit('regen', agent)"
+                  class="p-1.5 rounded text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors">
+            <KeyRound :size="13" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Enrollment token</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <button @click.stop="$emit('delete', agent)"
+                  class="p-1.5 rounded text-fg-subtle hover:text-red-400 hover:bg-red-950/30 transition-colors">
+            <Trash2 :size="13" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Удалить агента</TooltipContent>
+      </Tooltip>
     </div>
 
   </div>

@@ -118,14 +118,19 @@ watch(filteredAgents, () => clearSelection())
             </span>
           </Transition>
 
-          <button
-            @click="store.fetch()"
-            :disabled="store.isLoading"
-            class="h-8 w-8 flex items-center justify-center rounded-md border border-white/[0.08]
-                   text-fg-subtle hover:text-fg hover:border-white/20 transition-colors disabled:opacity-40"
-          >
-            <RefreshCw :size="13" :class="store.isLoading ? 'animate-spin' : ''" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button
+                @click="store.fetch()"
+                :disabled="store.isLoading"
+                class="h-8 w-8 flex items-center justify-center rounded-md border border-white/[0.08]
+                       text-fg-subtle hover:text-fg hover:border-white/20 transition-colors disabled:opacity-40"
+              >
+                <RefreshCw :size="13" :class="store.isLoading ? 'animate-spin' : ''" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Обновить список</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 

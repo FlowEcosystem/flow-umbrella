@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/flow-ecosystem/umbrella-agent/internal/agent"
 	"github.com/flow-ecosystem/umbrella-agent/internal/config"
 	"github.com/flow-ecosystem/umbrella-agent/internal/state"
+	"github.com/flow-ecosystem/umbrella-agent/internal/token"
 )
 
 const helpText = `Umbrella Agent
@@ -33,7 +36,9 @@ Commands:
   status     Print service status
 
 Flags:
-  --config <path>  Path to a JSON config file
+  --config <path>   Path to a JSON config file
+  --token  <token>  Offline decommission token (for uninstall when server is unavailable)
+                    Generate via: management console → Agents → Offline decommission token
 `
 
 func main() {
@@ -51,6 +56,7 @@ func main() {
 
 	fs := flag.NewFlagSet("umbrella-agent", flag.ExitOnError)
 	cfgFile := fs.String("config", "", "path to JSON config file")
+	offlineToken := fs.String("token", "", "offline decommission token")
 	_ = fs.Parse(rest)
 
 	switch cmd {
@@ -65,11 +71,11 @@ func main() {
 	case "install":
 		doInstall(*cfgFile)
 	case "uninstall":
-		doUninstall()
+		doUninstall(*cfgFile, *offlineToken)
 	case "start":
 		doStart()
 	case "stop":
-		doStop()
+		doStop(*cfgFile)
 	case "status":
 		doStatus()
 	case "help":
@@ -114,11 +120,32 @@ func doSetup(cfgFile string) {
 	waitForEnter()
 }
 
+// initLogging redirects slog to a rotating-append log file.
+// Returns a closer that flushes/closes the file; call defer on it.
+// Silently does nothing if logFile is empty or the file can't be opened.
+func initLogging(logFile string) io.Closer {
+	if logFile == "" {
+		return io.NopCloser(nil)
+	}
+	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
+		return io.NopCloser(nil)
+	}
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return io.NopCloser(nil)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	return f
+}
+
 func doRun(cfgFile string) {
 	cfg, err := config.Load(cfgFile)
 	if err != nil {
 		fatalf("load config: %v", err)
 	}
+	closer := initLogging(cfg.LogFile)
+	defer closer.Close()
+
 	if cfg.ServerURL == "" {
 		fatalf("server_url is required (config file or UMBRELLA_SERVER_URL env)")
 	}
@@ -160,7 +187,23 @@ func doInstall(cfgFile string) {
 	fmt.Println("\nAgent is running as a background service.")
 }
 
-func doUninstall() {
+func doUninstall(cfgFile, offlineToken string) {
+	if agentIsEnrolled(cfgFile) {
+		if offlineToken != "" && verifyOfflineToken(cfgFile, offlineToken) {
+			fmt.Println("Offline token verified. Proceeding with decommission.")
+		} else if offlineToken != "" {
+			fmt.Fprintln(os.Stderr, "\n  error: invalid or expired offline token.")
+			fmt.Fprintln(os.Stderr, "  Generate a fresh token via: management console → Agents → Offline decommission token")
+			os.Exit(1)
+		} else {
+			fmt.Fprintln(os.Stderr, "\n  Agent is enrolled and tamper-protected.")
+			fmt.Fprintln(os.Stderr, "  To remove: open the management console → Agents → Decommission.")
+			fmt.Fprintln(os.Stderr, "  The agent will uninstall itself upon receiving the server command.")
+			fmt.Fprintln(os.Stderr, "  If the server is unavailable, use: umbrella-agent uninstall --token <offline-token>")
+			os.Exit(1)
+		}
+	}
+
 	fmt.Print("Stopping service...    ")
 	_ = stopService()
 	fmt.Println("OK")
@@ -181,11 +224,44 @@ func doStart() {
 	fmt.Println("Service started.")
 }
 
-func doStop() {
+func doStop(cfgFile string) {
+	if agentIsEnrolled(cfgFile) {
+		fmt.Fprintln(os.Stderr, "\n  Agent is enrolled and tamper-protected.")
+		fmt.Fprintln(os.Stderr, "  Service cannot be stopped manually. Use the management console.")
+		os.Exit(1)
+	}
 	if err := stopService(); err != nil {
 		fatalf("stop service: %v", err)
 	}
 	fmt.Println("Service stopped.")
+}
+
+// agentIsEnrolled returns true if a valid state file exists with an agent ID.
+func agentIsEnrolled(cfgFile string) bool {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return false
+	}
+	s, err := state.Load(cfg.StateFile)
+	if err != nil {
+		return false
+	}
+	return s.IsEnrolled()
+}
+
+// verifyOfflineToken checks an admin-supplied offline decommission token.
+// The token is a base64url-encoded ECDSA P-256 signature over SHA-256 of
+// "decommission:{agentID}:{dayStamp}", verified with the public key stored at enrollment.
+func verifyOfflineToken(cfgFile, tok string) bool {
+	cfg, err := config.Load(cfgFile)
+	if err != nil {
+		return false
+	}
+	s, err := state.Load(cfg.StateFile)
+	if err != nil || !s.IsEnrolled() {
+		return false
+	}
+	return token.Validate(s.DecommissionPublicKey, s.AgentID, tok)
 }
 
 func doStatus() {
@@ -204,6 +280,9 @@ func runManagedService() error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	closer := initLogging(cfg.LogFile)
+	defer closer.Close()
+
 	s, err := state.Load(cfg.StateFile)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)

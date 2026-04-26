@@ -18,6 +18,7 @@ from umbrella_server.domains.agents.schemas import (
     AgentRenewResponse,
 )
 from umbrella_server.domains.agents.service import AgentService
+from umbrella_server.pki.decommission_key import DecommissionKey
 from umbrella_server.domains.commands.schemas import AgentCommandItem, AgentCommandResultRequest
 from umbrella_server.domains.commands.service import CommandService
 from umbrella_server.domains.policies.schemas import AgentPolicyItem
@@ -36,6 +37,7 @@ async def enroll(
     payload: AgentEnrollRequest,
     service: FromDishka[AgentService],
     settings: FromDishka[Settings],
+    decommission_key: FromDishka[DecommissionKey | None],
 ) -> AgentEnrollResponse:
     agent, raw_token, cert_pem, ca_cert_pem = await service.enroll(
         enrollment_token=payload.enrollment_token,
@@ -54,6 +56,7 @@ async def enroll(
         cert_expires_at=agent.cert_expires_at,  # type: ignore[arg-type]
         policy_poll_interval_sec=settings.policy_poll_interval_sec,
         command_poll_interval_sec=settings.command_poll_interval_sec,
+        decommission_pubkey=decommission_key.public_key_pem() if decommission_key else None,
     )
 
 

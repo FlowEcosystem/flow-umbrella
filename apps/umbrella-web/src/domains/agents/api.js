@@ -9,6 +9,7 @@ export const agentsApi = {
   regenerateToken: (id)     => http.post(`/v1/agents/${id}/regenerate-enrollment-token`).then(r => r.data),
   listGroups:      (id)     => http.get(`/v1/agents/${id}/groups`).then(r => r.data),
   listPolicies:    (id)     => http.get(`/v1/agents/${id}/policies`).then(r => r.data),
-  listCommands:    (id)     => http.get(`/v1/agents/${id}/commands`).then(r => r.data),
-  issueCommand:    (id, data) => http.post(`/v1/agents/${id}/commands`, data).then(r => r.data),
+  listCommands:             (id)     => http.get(`/v1/agents/${id}/commands`).then(r => r.data),
+  issueCommand:             (id, data) => http.post(`/v1/agents/${id}/commands`, data).then(r => r.data),
+  generateDecommissionToken:(id)     => http.post(`/v1/agents/${id}/decommission-token`).then(r => r.data),
 }

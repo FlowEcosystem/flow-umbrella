@@ -3,13 +3,14 @@ import {
   ArrowLeft, Pencil, KeyRound, Trash2,
   Monitor, Clock, Calendar, Hash, FileText, Layers,
   Plus, X, Search, Loader2, ShieldCheck, ShieldOff, Globe,
-  Terminal, RefreshCw,
+  Terminal, RefreshCw, ShieldAlert, PowerOff,
 } from 'lucide-vue-next'
-import { useAgentDetailPage }  from '@/domains/agents/useAgentDetailPage'
-import { usePermissions }      from '@/shared/composables/usePermissions'
-import AgentEditDialog         from '@/domains/agents/ui/components/AgentEditDialog.vue'
-import AgentTokenDialog        from '@/domains/agents/ui/components/AgentTokenDialog.vue'
-import AgentCommandDialog      from '@/domains/agents/ui/components/AgentCommandDialog.vue'
+import { useAgentDetailPage }      from '@/domains/agents/useAgentDetailPage'
+import { usePermissions }          from '@/shared/composables/usePermissions'
+import AgentEditDialog             from '@/domains/agents/ui/components/AgentEditDialog.vue'
+import AgentTokenDialog            from '@/domains/agents/ui/components/AgentTokenDialog.vue'
+import AgentCommandDialog          from '@/domains/agents/ui/components/AgentCommandDialog.vue'
+import AgentOfflineTokenDialog     from '@/domains/agents/ui/components/AgentOfflineTokenDialog.vue'
 
 const route = useRoute()
 const id    = route.params.id
@@ -31,6 +32,9 @@ const {
   deleteOpen, deleteLoading, confirmDelete,
   COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
   cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand,
+  offlineTokenOpen, offlineTokenData, offlineTokenLoading, offlineTokenCopied,
+  generateOfflineToken, copyOfflineToken,
+  decommissionOpen, decommissionLoading, confirmDecommission,
 } = useAgentDetailPage(id)
 
 const { canWrite } = usePermissions()
@@ -80,18 +84,53 @@ const { canWrite } = usePermissions()
             <Pencil :size="13" />
             Редактировать
           </button>
-          <button @click="regenOpen = true"
-            class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
-                   text-fg-subtle hover:text-fg hover:border-white/20 transition-colors"
-            title="Перевыпустить токен">
-            <KeyRound :size="14" />
-          </button>
-          <button @click="deleteOpen = true"
-            class="h-8 w-8 flex items-center justify-center rounded-lg border border-red-900/30
-                   text-red-400/60 hover:text-red-400 hover:border-red-800/60 transition-colors"
-            title="Удалить агента">
-            <Trash2 :size="14" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button @click="regenOpen = true"
+                class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
+                       text-fg-subtle hover:text-fg hover:border-white/20 transition-colors">
+                <KeyRound :size="14" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Перевыпустить enrollment-токен</TooltipContent>
+          </Tooltip>
+
+          <Tooltip v-if="displayAgent?.status === 'active'">
+            <TooltipTrigger as-child>
+              <button
+                @click="generateOfflineToken"
+                :disabled="offlineTokenLoading"
+                class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
+                       text-fg-subtle hover:text-amber-400 hover:border-amber-800/40 transition-colors
+                       disabled:opacity-40 disabled:cursor-wait">
+                <ShieldAlert :size="14" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Offline-токен деинсталляции</TooltipContent>
+          </Tooltip>
+
+          <Tooltip v-if="displayAgent?.status === 'active'">
+            <TooltipTrigger as-child>
+              <button
+                @click="decommissionOpen = true"
+                class="h-8 w-8 flex items-center justify-center rounded-lg border border-red-900/30
+                       text-red-400/60 hover:text-red-400 hover:border-red-800/60 transition-colors">
+                <PowerOff :size="14" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Деинсталлировать агент</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <button @click="deleteOpen = true"
+                class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
+                       text-fg-subtle hover:text-red-400/60 hover:border-red-900/30 transition-colors">
+                <Trash2 :size="14" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Удалить запись агента</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
@@ -152,17 +191,20 @@ const { canWrite } = usePermissions()
             <Layers :size="13" class="text-fg-subtle/60" />
             <span class="text-xs text-fg-subtle uppercase tracking-wider">Группы</span>
           </div>
-          <button
-            v-if="canWrite"
-            @click="addGroupOpen = !addGroupOpen"
-            class="h-6 w-6 flex items-center justify-center rounded-md transition-colors"
-            :class="addGroupOpen
-              ? 'bg-accent/20 text-accent border border-accent/30'
-              : 'text-fg-subtle hover:text-fg hover:bg-white/[0.06] border border-transparent'"
-            title="Добавить в группу"
-          >
-            <component :is="addGroupOpen ? X : Plus" :size="12" />
-          </button>
+          <Tooltip v-if="canWrite">
+            <TooltipTrigger as-child>
+              <button
+                @click="addGroupOpen = !addGroupOpen"
+                class="h-6 w-6 flex items-center justify-center rounded-md transition-colors"
+                :class="addGroupOpen
+                  ? 'bg-accent/20 text-accent border border-accent/30'
+                  : 'text-fg-subtle hover:text-fg hover:bg-white/[0.06] border border-transparent'"
+              >
+                <component :is="addGroupOpen ? X : Plus" :size="12" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{{ addGroupOpen ? 'Закрыть' : 'Добавить в группу' }}</TooltipContent>
+          </Tooltip>
         </div>
 
         <!-- add-to-group panel -->
@@ -239,17 +281,20 @@ const { canWrite } = usePermissions()
             <span v-if="group.description" class="text-xs text-fg-subtle/60 truncate max-w-[180px] hidden group-hover/row:block">
               {{ group.description }}
             </span>
-            <button
-              v-if="canWrite"
-              @click="removeFromGroup(group.id)"
-              :disabled="removeLoading[group.id]"
-              class="opacity-0 group-hover/row:opacity-100 p-1 rounded text-fg-subtle/40
-                     hover:text-red-400 hover:bg-red-950/30 transition-all disabled:cursor-wait shrink-0"
-              title="Убрать из группы"
-            >
-              <Loader2 v-if="removeLoading[group.id]" :size="12" class="animate-spin" />
-              <X v-else :size="12" />
-            </button>
+            <Tooltip v-if="canWrite">
+              <TooltipTrigger as-child>
+                <button
+                  @click="removeFromGroup(group.id)"
+                  :disabled="removeLoading[group.id]"
+                  class="opacity-0 group-hover/row:opacity-100 p-1 rounded text-fg-subtle/40
+                         hover:text-red-400 hover:bg-red-950/30 transition-all disabled:cursor-wait shrink-0"
+                >
+                  <Loader2 v-if="removeLoading[group.id]" :size="12" class="animate-spin" />
+                  <X v-else :size="12" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Убрать из группы</TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -324,24 +369,31 @@ const { canWrite } = usePermissions()
             <span v-if="commands.length" class="text-xs text-fg-subtle/50 tabular-nums">{{ commands.length }}</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <button
-              @click="fetchCommands"
-              :disabled="commandsLoading"
-              class="h-6 w-6 flex items-center justify-center rounded-md text-fg-subtle/50
-                     hover:text-fg hover:bg-white/[0.06] transition-colors disabled:opacity-40"
-              title="Обновить"
-            >
-              <RefreshCw :size="11" :class="commandsLoading ? 'animate-spin' : ''" />
-            </button>
-            <button
-              v-if="canWrite"
-              @click="openCmdDialog"
-              class="h-6 w-6 flex items-center justify-center rounded-md transition-colors
-                     text-fg-subtle hover:text-fg hover:bg-white/[0.06] border border-transparent"
-              title="Отправить команду"
-            >
-              <Plus :size="12" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  @click="fetchCommands"
+                  :disabled="commandsLoading"
+                  class="h-6 w-6 flex items-center justify-center rounded-md text-fg-subtle/50
+                         hover:text-fg hover:bg-white/[0.06] transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw :size="11" :class="commandsLoading ? 'animate-spin' : ''" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Обновить список команд</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="canWrite">
+              <TooltipTrigger as-child>
+                <button
+                  @click="openCmdDialog"
+                  class="h-6 w-6 flex items-center justify-center rounded-md transition-colors
+                         text-fg-subtle hover:text-fg hover:bg-white/[0.06] border border-transparent"
+                >
+                  <Plus :size="12" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Отправить команду</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -447,6 +499,24 @@ const { canWrite } = usePermissions()
       @update:type="cmdType = $event"
       @update:payload="cmdPayload = $event"
       @submit="submitCommand"
+    />
+
+    <AgentOfflineTokenDialog
+      v-model:open="offlineTokenOpen"
+      :data="offlineTokenData"
+      :copied="offlineTokenCopied"
+      @copy="copyOfflineToken"
+    />
+
+    <UiConfirmDialog
+      :open="decommissionOpen"
+      variant="danger"
+      title="Деинсталляция агента"
+      :description="`Отправить команду деинсталляции агенту ${displayAgent?.hostname}? Агент удалит себя с хоста. Это действие необратимо.`"
+      confirm-text="Деинсталлировать"
+      :loading="decommissionLoading"
+      @update:open="v => !v && (decommissionOpen = false)"
+      @confirm="confirmDecommission"
     />
   </div>
 </template>

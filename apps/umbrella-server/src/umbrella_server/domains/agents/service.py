@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-import secrets
 import hashlib
+import secrets
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from umbrella_server.domains.agents.exceptions import (
 from umbrella_server.domains.agents.models import Agent, AgentOS, AgentStatus
 from umbrella_server.domains.agents.repository import AgentRepository
 from umbrella_server.pki import BranchCA
+from umbrella_server.pki.decommission_key import DecommissionKey
 
 logger = get_logger(__name__)
 
@@ -46,11 +47,13 @@ class AgentService:
         settings: Settings,
         repo: AgentRepository,
         ca: BranchCA | None,
+        decommission_key: DecommissionKey | None,
     ) -> None:
         self._session = session
         self._settings = settings
         self._repo = repo
         self._ca = ca
+        self._decommission_key = decommission_key
 
     async def get(self, agent_id: UUID) -> Agent:
         agent = await self._repo.get_by_id(agent_id)
@@ -244,6 +247,20 @@ class AgentService:
         await self._session.commit()
         logger.info("agent_cert_renewed", agent_id=str(agent.id))
         return cert_pem, ca_cert_pem
+
+    def generate_decommission_token(self, agent: Agent) -> tuple[str, datetime]:
+        """Генерирует offline-токен деинсталляции (ECDSA P-256 подпись).
+
+        Приватный ключ хранится только на сервере. Агент верифицирует подпись
+        публичным ключом, полученным при enrollment, — без обращения к серверу.
+        """
+        if self._decommission_key is None:
+            raise ConfigurationError(
+                "Offline decommission tokens require SERVER_DECOMMISSION_KEY_PATH"
+            )
+        if agent.agent_token_hash is None:
+            raise AgentNotFoundError(agent.id)
+        return self._decommission_key.sign(str(agent.id))
 
     async def regenerate_enrollment_token(self, agent_id: UUID) -> tuple[Agent, str]:
         """Генерит новый enrollment-токен для агента.

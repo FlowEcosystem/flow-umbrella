@@ -89,12 +89,14 @@ export function useAgentDetailPage(id) {
   const commands        = ref([])
   const commandsLoading = ref(false)
 
-  const COMMAND_TYPES = ['reboot', 'collect_diagnostics', 'update_self', 'apply_config']
+  const COMMAND_TYPES = ['reboot', 'collect_diagnostics', 'update_self', 'apply_config', 'sync_policies']
   const COMMAND_TYPE_LABELS = {
     reboot:               'Перезагрузка',
     collect_diagnostics:  'Сбор диагностики',
     update_self:          'Обновить агент',
     apply_config:         'Применить конфиг',
+    sync_policies:        'Синхр. политики',
+    decommission:         'Деинсталляция',
   }
   const COMMAND_STATUS_LABELS = {
     pending:      'Ожидает',
@@ -150,6 +152,52 @@ export function useAgentDetailPage(id) {
       cmdError.value = err.message ?? 'Ошибка отправки команды'
     } finally {
       cmdLoading.value = false
+    }
+  }
+
+  // ── offline decommission token ─────────────────────────────
+  const offlineTokenOpen    = ref(false)
+  const offlineTokenData    = ref(null)
+  const offlineTokenLoading = ref(false)
+  const offlineTokenCopied  = ref(false)
+
+  async function generateOfflineToken() {
+    offlineTokenLoading.value = true
+    try {
+      const data = await agentsApi.generateDecommissionToken(id)
+      offlineTokenData.value   = data
+      offlineTokenCopied.value = false
+      offlineTokenOpen.value   = true
+    } catch (err) {
+      toast.error(err.message ?? 'Ошибка генерации токена')
+    } finally {
+      offlineTokenLoading.value = false
+    }
+  }
+
+  function copyOfflineToken() {
+    navigator.clipboard.writeText(offlineTokenData.value.token)
+    offlineTokenCopied.value = true
+    setTimeout(() => { offlineTokenCopied.value = false }, 2000)
+  }
+
+  // ── decommission ───────────────────────────────────────────
+  const decommissionOpen    = ref(false)
+  const decommissionLoading = ref(false)
+
+  async function confirmDecommission() {
+    decommissionLoading.value = true
+    try {
+      await agentsApi.issueCommand(id, { type: 'decommission' })
+      await agentsStore.update(id, { status: 'decommissioned' })
+      localAgent.value = { ...localAgent.value, status: 'decommissioned' }
+      decommissionOpen.value = false
+      toast.success('Команда деинсталляции отправлена')
+    } catch (err) {
+      toast.error(err.message ?? 'Ошибка')
+      decommissionOpen.value = false
+    } finally {
+      decommissionLoading.value = false
     }
   }
 
@@ -288,6 +336,9 @@ export function useAgentDetailPage(id) {
 
   return {
     displayAgent, isLoading,
+    offlineTokenOpen, offlineTokenData, offlineTokenLoading, offlineTokenCopied,
+    generateOfflineToken, copyOfflineToken,
+    decommissionOpen, decommissionLoading, confirmDecommission,
     groups, groupsLoading,
     policies, policiesLoading,
     commands, commandsLoading,

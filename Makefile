@@ -1,7 +1,7 @@
 COMPOSE_FILE := infra/docker/docker-compose.yml
 SECRETS_FILE := infra/secrets/.env
 APP_DIR      := apps/umbrella-server
-WEB_DIR      := apps/umbrella-web1
+WEB_DIR      := apps/umbrella-web
 COMPOSE      := docker compose --env-file $(SECRETS_FILE) -f $(COMPOSE_FILE)
 
 s ?= server

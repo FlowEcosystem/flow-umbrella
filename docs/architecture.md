@@ -89,9 +89,9 @@ Python 3.13 / FastAPI / SQLAlchemy async / PostgreSQL 16. Упакован в Do
 - Зеркалирование глобальных политик из HQ; владеет локальными политиками.
 - Периодическую исходящую синхронизацию с HQ (heartbeat, агрегированные метрики, критичные события, pull версий политик).
 
-### umbrella-web1 (фронтенд — актуальный)
+### umbrella-web (фронтенд)
 
-SPA на **Vue 3 / Vite 8 / Tailwind CSS v4**. Компонентная система на базе **shadcn-vue** (reka-ui). Ходит в API сервера филиала через axios. Один build-артефакт используется всеми филиалами.
+SPA на **Vue 3 / Vite 8 / Tailwind CSS v4** (директория `apps/umbrella-web`, package name `umbrella-web1`). Компонентная система на базе **shadcn-vue** (reka-ui). Ходит в API сервера филиала через axios. Один build-артефакт используется всеми филиалами.
 
 **Стек:**
 - Vue 3.5, vue-router 4, Pinia 3
@@ -120,9 +120,11 @@ src/
     lib/utils.js — cn() и утилиты
 ```
 
-### umbrella-web (фронтенд — удалён)
-
-Прежний SPA на Vue 3 / PrimeVue. Заменён на `umbrella-web1` и удалён из монорепы.
+**Ключевые компоненты по доменам:**
+- `agents/` — AgentCreateDialog, AgentEditDialog, AgentTokenDialog, AgentCommandDialog (отправка команды агенту), AgentBulkBar (bulk-операции); useBulkAgents
+- `policies/` — PolicyFormDialog, ProcessPolicyFormDialog, PolicyAssignDialog (назначение на группы/агентов), PolicyTestDialog, CsvImportDialog, ServicesTab, ProcessesTab; servicePresets.js (преднастроенные сервисы)
+- `groups/` — GroupFormDialog, GroupMembersDialog
+- `admins/` — AdminFormDialog
 
 ### umbrella-agent
 
@@ -235,7 +237,9 @@ Python/FastAPI-сервис, отдельный от сервера филиал
 - Учётка: mTLS клиентский сертификат, выпущенный внутренним Branch CA при enrollment'е.
 - Enrollment: одноразовый токен, сгенеренный админом филиала. Агент локально генерирует RSA-ключ и отправляет CSR; сервер подписывает. Токен — single-use, обнуляется после enrollment.
 - Ротация сертификата: TTL 30 дней, агент обновляет за `cert_renew_before_days` дней до истечения.
-- Nginx проверяет клиентский сертификат (`ssl_client_certificate = ca.crt`, `ssl_verify_client on`), пробрасывает `X-Agent-Cert-CN` (Subject DN RFC 2253) в FastAPI. FastAPI читает заголовок, извлекает UUID агента, аутентифицирует.
+- Nginx проверяет клиентский сертификат (`ssl_client_certificate = ca.crt`, `ssl_verify_client on`), пробрасывает `X-Agent-Cert-CN` (Subject DN RFC 2253) и `X-Agent-Cert-Verified` в FastAPI. FastAPI читает заголовки, извлекает UUID агента из CN (формат `agent:<UUID>`, пример: `CN=agent:550e8400-...`), аутентифицирует по `agent_id`.
+- Dev-fallback (без nginx, `AGENT_MTLS=false`): Bearer-токен, проверяется по `agent_token_hash` в таблице `agents`. Выдаётся при enrollment в поле `agent_token`.
+- На prod-порту 443 (Admin API) nginx явно зачищает `X-Agent-Cert-CN` через `proxy_set_header`, исключая подделку заголовка.
 - Скомпрометированный агент: сертификат отзывается через CRL; агент больше не подключится.
 
 ### HQ-админы (в будущем)
@@ -420,12 +424,12 @@ location /v1/agent/ {
 - `GET /v1/agents/{agent_id}/commands/{command_id}` — детали команды (`commands:read`)
 
 ### Agent API `/v1/agent` (только через nginx :8443, mTLS)
-- `POST /v1/agent/enroll` — enrollment (Bearer token из тела, без cert)
-- `POST /v1/agent/heartbeat` — heartbeat (mTLS cert)
-- `GET /v1/agent/commands` — получить очередь команд (mTLS cert)
-- `POST /v1/agent/commands/{id}/result` — отправить результат команды (mTLS cert)
-- `GET /v1/agent/policies` — получить политики (mTLS cert)
-- `POST /v1/agent/renew` — обновить сертификат (mTLS cert)
+- `POST /v1/agent/enroll` — enrollment (enrollment_token + CSR в теле, без cert). Ответ: `agent_id`, `agent_token`, `cert_pem`, `ca_cert_pem`, `cert_expires_at`, `policy_poll_interval_sec`, `command_poll_interval_sec`.
+- `POST /v1/agent/heartbeat` — heartbeat (mTLS cert / Bearer). Обновляет `last_seen_at`, `os_version`, `agent_version`, `ip_address`.
+- `GET /v1/agent/commands` — получить очередь pending-команд (mTLS cert / Bearer)
+- `POST /v1/agent/commands/{id}/result` — отправить результат команды (mTLS cert / Bearer)
+- `GET /v1/agent/policies` — получить политики, применимые к данному агенту (mTLS cert / Bearer). Возвращает политики из прямых назначений агенту + назначений на группы агента; правила из `custom_rules` и подключённых сервисов объединяются.
+- `POST /v1/agent/renew` — обновить сертификат (mTLS cert / Bearer)
 
 ---
 
@@ -561,5 +565,4 @@ Prometheus + Grafana, хостится в HQ. Серверы филиалов в
 - Сроки хранения логов на каждом слое (филиал, HQ, по типам событий).
 - Модель approval flow для команд Фазы 2.
 - Multi-region деплой HQ (active/passive, read-реплики?).
-- Таргетинг политик на группы: явная M2M-связь `policy_groups` пока не реализована — политики применяются глобально или через фильтрацию на агенте.
 - Cert renewal агента: сервер должен отзывать старый сертификат при выпуске нового (CRL не реализован).

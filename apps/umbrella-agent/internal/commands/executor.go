@@ -28,7 +28,9 @@ func Execute(cmdType string, payload json.RawMessage) Result {
 	case "collect_diagnostics":
 		return collectDiagnostics()
 	case "update_self":
-		return Result{Status: "failure", ErrMsg: "update_self: not implemented in this build"}
+		return updateSelf(payload)
+	case "decommission":
+		return decommission()
 	case "apply_config":
 		return Result{Status: "success", Output: jsonMsg("config reloaded (noop)")}
 	default:

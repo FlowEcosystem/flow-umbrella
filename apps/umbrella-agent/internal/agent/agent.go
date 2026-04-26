@@ -14,6 +14,7 @@ import (
 	"github.com/flow-ecosystem/umbrella-agent/internal/api"
 	"github.com/flow-ecosystem/umbrella-agent/internal/commands"
 	"github.com/flow-ecosystem/umbrella-agent/internal/config"
+	"github.com/flow-ecosystem/umbrella-agent/internal/enforce"
 	"github.com/flow-ecosystem/umbrella-agent/internal/pki"
 	"github.com/flow-ecosystem/umbrella-agent/internal/state"
 )
@@ -81,6 +82,9 @@ func (a *Agent) Enroll() error {
 	a.state.CACertPEM = resp.CACertPEM
 	a.state.CertExpiresAt = resp.CertExpiresAt
 	a.state.EnrolledAt = time.Now().UTC()
+	if resp.DecommissionPubkey != "" {
+		a.state.DecommissionPublicKey = resp.DecommissionPubkey
+	}
 
 	if err := a.state.Save(a.cfg.StateFile); err != nil {
 		return fmt.Errorf("save state: %w", err)
@@ -164,6 +168,7 @@ func (a *Agent) Run(done <-chan struct{}) {
 		select {
 		case <-done:
 			a.log.Info("agent shutting down")
+			enforce.Apply(nil, a.cfg.StateFile) // restore DNS, stop sinkhole
 			return
 		case <-heartbeatTick.C:
 			a.doHeartbeat()
@@ -227,6 +232,29 @@ func (a *Agent) executeCommand(cmd api.Command) {
 
 	a.log.Info("executing command", "id", cmd.ID, "type", cmd.Type)
 
+	// sync_policies: report success, then immediately repoll so the admin
+	// sees the new policy applied in seconds rather than waiting up to 60s.
+	if cmd.Type == "sync_policies" {
+		_ = a.client.SubmitCommandResult(cmd.ID, api.CommandResultRequest{
+			Status: "success",
+			Result: json.RawMessage(`{"message":"policy sync triggered"}`),
+		})
+		a.doPolicyPoll()
+		return
+	}
+
+	if cmd.Type == "decommission" {
+		a.log.Info("decommission command received, cleaning up")
+		_ = a.client.SubmitCommandResult(cmd.ID, api.CommandResultRequest{
+			Status: "success",
+			Result: json.RawMessage(`{"message":"agent decommissioning"}`),
+		})
+		enforce.Apply(nil, a.cfg.StateFile) // restore DNS, stop sinkhole
+		commands.Execute("decommission", nil) // launch cleanup script
+		os.Exit(0)
+		return
+	}
+
 	// Reboot kills the process before we can report back, so report first.
 	if cmd.Type == "reboot" {
 		_ = a.client.SubmitCommandResult(cmd.ID, api.CommandResultRequest{
@@ -254,13 +282,30 @@ func (a *Agent) executeCommand(cmd api.Command) {
 // ── Policy polling ───────────────────────────────────────────────────────────
 
 func (a *Agent) doPolicyPoll() {
-	policies, err := a.client.GetPolicies()
+	apiPolicies, err := a.client.GetPolicies()
 	if err != nil {
 		a.log.Warn("policy poll failed", "err", err)
 		return
 	}
-	a.log.Debug("policies received", "count", len(policies))
-	// TODO: apply policies (firewall rules, process filtering) via platform hooks.
+	a.log.Debug("policies received", "count", len(apiPolicies))
+
+	var policies []enforce.Policy
+	for _, p := range apiPolicies {
+		policies = append(policies, enforce.Policy{
+			ID:     p.ID,
+			Name:   p.Name,
+			Kind:   p.Kind,
+			Action: p.Action,
+			Rules:  enforce.ParseRules(p.Rules),
+		})
+	}
+	enforce.Apply(policies, a.cfg.StateFile)
+
+	if err := enforce.SaveState(a.cfg.StateFile, policies); err != nil {
+		a.log.Warn("policy state save failed", "path", enforce.PolicyStatePath(a.cfg.StateFile), "err", err)
+	} else {
+		a.log.Debug("policy state saved", "path", enforce.PolicyStatePath(a.cfg.StateFile), "count", len(policies))
+	}
 }
 
 // ── Certificate renewal ──────────────────────────────────────────────────────

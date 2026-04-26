@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -93,8 +94,44 @@ func installService(_ string) error {
 	if err != nil {
 		return fmt.Errorf("create service: %w", err)
 	}
-	s.Close()
+	defer s.Close()
+
+	// Restart immediately on any crash, up to 3 times; reset counter after 24h.
+	recovery := []mgr.RecoveryAction{
+		{Type: mgr.ServiceRestart, Delay: 0},
+		{Type: mgr.ServiceRestart, Delay: 0},
+		{Type: mgr.ServiceRestart, Delay: 0},
+	}
+	if err := s.SetRecoveryActions(recovery, 86400); err != nil {
+		fmt.Printf("warning: could not set recovery actions: %v\n", err)
+	}
+
+	// Restrict the service DACL: only SYSTEM has full control.
+	// Admins and Users can query status but cannot stop, delete, or reconfigure.
+	const sddl = `D:(A;;CCLCSWRPWPDTLOCRSDRCWDWO;;;SY)(A;;CCLCRC;;;BA)(A;;CCLCRC;;;BU)`
+	if err := exec.Command("sc", "sdset", serviceName, sddl).Run(); err != nil {
+		fmt.Printf("warning: could not set service DACL: %v\n", err)
+	}
+
+	// Lock the installation directory: SYSTEM full control, everyone else read+execute.
+	protectInstallDir(exePath)
 	return nil
+}
+
+// protectInstallDir sets an ACL on the agent directory so only SYSTEM can
+// write or delete files. Uses locale-independent SID syntax.
+func protectInstallDir(exePath string) {
+	dir := filepath.Dir(exePath)
+	err := exec.Command("icacls", dir,
+		"/inheritance:r",
+		"/grant:r", "*S-1-5-18:(OI)(CI)(F)",   // SYSTEM: full control
+		"/grant:r", "*S-1-5-32-544:(OI)(CI)(RX)", // Administrators: read+execute
+		"/grant:r", "*S-1-5-32-545:(OI)(CI)(RX)", // Users: read+execute
+		"/T",
+	).Run()
+	if err != nil {
+		fmt.Printf("warning: could not set directory ACL: %v\n", err)
+	}
 }
 
 func uninstallService() error {

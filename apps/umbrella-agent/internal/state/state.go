@@ -23,6 +23,10 @@ type State struct {
 
 	// Last successful heartbeat time — written by the agent loop, read by monitor.
 	LastHeartbeatAt *time.Time `json:"last_heartbeat_at,omitempty"`
+
+	// PEM-encoded ECDSA public key from the server, used to verify offline
+	// decommission tokens without contacting the server.
+	DecommissionPublicKey string `json:"decommission_pubkey,omitempty"`
 }
 
 func (s *State) IsEnrolled() bool {

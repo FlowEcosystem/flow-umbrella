@@ -147,6 +147,7 @@ type EnrollResponse struct {
 	CertExpiresAt          time.Time `json:"cert_expires_at"`
 	PolicyPollIntervalSec  int       `json:"policy_poll_interval_sec"`
 	CommandPollIntervalSec int       `json:"command_poll_interval_sec"`
+	DecommissionPubkey     string    `json:"decommission_pubkey"`
 }
 
 type HeartbeatRequest struct {
