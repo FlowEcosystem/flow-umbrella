@@ -91,7 +91,7 @@ export function useAgentDetailPage(id) {
   async function fetchMetrics() {
     metricsLoading.value = true
     try {
-      metricsHistory.value = await agentsApi.getMetrics(id, 60)
+      metricsHistory.value = await agentsApi.getMetrics(id, 288)
     } catch {
       metricsHistory.value = []
     } finally {

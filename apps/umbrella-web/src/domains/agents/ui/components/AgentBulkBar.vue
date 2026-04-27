@@ -1,20 +1,19 @@
 <script setup>
-import { X, Users, CheckSquare, ChevronDown, Loader2 } from 'lucide-vue-next'
+import { X, Users, CheckSquare, ChevronDown, Loader2, PowerOff } from 'lucide-vue-next'
 import { useGroupsStore } from '@/domains/groups/store'
 
 const props = defineProps({
-  selectedCount:    { type: Number,   required: true },
-  totalCount:       { type: Number,   required: true },
-  allSelected:      { type: Boolean,  default: false },
-  statusLoading:    { type: Boolean,  default: false },
-  groupLoading:     { type: Boolean,  default: false },
+  selectedCount:    { type: Number,  required: true },
+  totalCount:       { type: Number,  required: true },
+  allSelected:      { type: Boolean, default: false },
+  groupLoading:     { type: Boolean, default: false },
 })
 
-defineEmits(['clear', 'select-all', 'set-status', 'add-to-group'])
+defineEmits(['clear', 'select-all', 'add-to-group', 'decommission'])
 
-const groupsStore = useGroupsStore()
+const groupsStore  = useGroupsStore()
 const groupDropOpen = ref(false)
-const groupDropRef = ref(null)
+const groupDropRef  = ref(null)
 
 function onDocClick(e) {
   if (groupDropRef.value && !groupDropRef.value.contains(e.target)) {
@@ -27,12 +26,6 @@ onMounted(() => {
   if (!groupsStore.items.length) groupsStore.fetch()
 })
 onUnmounted(() => document.removeEventListener('click', onDocClick))
-
-const STATUS_OPTIONS = [
-  { value: 'active',         label: 'Активен',  dot: 'bg-emerald-400' },
-  { value: 'disabled',       label: 'Отключён', dot: 'bg-fg-subtle' },
-  { value: 'decommissioned', label: 'Выведен',  dot: 'bg-red-400' },
-]
 </script>
 
 <template>
@@ -61,32 +54,11 @@ const STATUS_OPTIONS = [
             :class="allSelected
               ? 'text-accent bg-accent/10'
               : 'text-fg-subtle hover:text-fg hover:bg-white/[0.06]'"
-            title="Выбрать все на странице"
           >
             <CheckSquare :size="12" />
             {{ allSelected ? 'Все' : 'Выбрать все' }}
           </button>
         </div>
-
-        <!-- set status -->
-        <div class="flex items-center gap-1">
-          <span class="text-xs text-fg-subtle/60 mr-0.5">Статус:</span>
-          <button
-            v-for="s in STATUS_OPTIONS"
-            :key="s.value"
-            @click="$emit('set-status', s.value)"
-            :disabled="statusLoading"
-            class="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs border border-white/[0.08]
-                   text-fg-subtle hover:text-fg hover:border-white/20 transition-colors disabled:opacity-40"
-          >
-            <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="s.dot" />
-            {{ s.label }}
-          </button>
-          <Loader2 v-if="statusLoading" :size="13" class="animate-spin text-fg-subtle ml-1" />
-        </div>
-
-        <!-- divider -->
-        <div class="w-px h-5 bg-white/[0.1]" />
 
         <!-- add to group -->
         <div class="relative" ref="groupDropRef">
@@ -136,11 +108,28 @@ const STATUS_OPTIONS = [
         <!-- divider -->
         <div class="w-px h-5 bg-white/[0.1]" />
 
+        <!-- decommission -->
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <button
+              @click="$emit('decommission')"
+              class="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs border transition-colors
+                     border-red-900/40 text-red-400/70 hover:text-red-400 hover:border-red-800/60"
+            >
+              <PowerOff :size="12" />
+              Деинсталлировать
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Отправить команду деинсталляции выбранным агентам</TooltipContent>
+        </Tooltip>
+
+        <!-- divider -->
+        <div class="w-px h-5 bg-white/[0.1]" />
+
         <!-- clear -->
         <button
           @click="$emit('clear')"
           class="p-1.5 rounded-md text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors"
-          title="Снять выделение"
         >
           <X :size="14" />
         </button>

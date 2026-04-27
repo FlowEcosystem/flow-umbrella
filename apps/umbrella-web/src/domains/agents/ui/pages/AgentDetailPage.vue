@@ -10,6 +10,7 @@ import { usePermissions }          from '@/shared/composables/usePermissions'
 import AgentEditDialog             from '@/domains/agents/ui/components/AgentEditDialog.vue'
 import AgentCommandDialog          from '@/domains/agents/ui/components/AgentCommandDialog.vue'
 import AgentOfflineTokenDialog     from '@/domains/agents/ui/components/AgentOfflineTokenDialog.vue'
+import AgentMetricChart            from '@/domains/agents/ui/components/AgentMetricChart.vue'
 
 const route = useRoute()
 const id    = route.params.id
@@ -174,6 +175,7 @@ const { canWrite } = usePermissions()
           <div v-for="i in 3" :key="i" class="bg-bg-raised px-4 py-4">
             <Skeleton class="h-3 w-16 rounded mb-3 bg-white/[0.06]" />
             <Skeleton class="h-1.5 w-full rounded-full bg-white/[0.05]" />
+            <Skeleton class="h-16 w-full rounded mt-3 bg-white/[0.04]" />
           </div>
         </div>
 
@@ -188,14 +190,19 @@ const { canWrite } = usePermissions()
             <div class="flex items-center gap-1.5 mb-2">
               <Cpu :size="11" class="text-fg-subtle/50" />
               <span class="text-xs text-fg-subtle/70 uppercase tracking-wider">CPU</span>
-              <span class="text-sm text-fg font-mono ml-auto tabular-nums">
+              <span class="text-sm text-fg font-mono ml-auto tabular-nums"
+                    :class="latestMetric.cpu_percent > 80 ? 'text-red-400' : latestMetric.cpu_percent > 50 ? 'text-amber-400' : ''">
                 {{ latestMetric.cpu_percent != null ? latestMetric.cpu_percent.toFixed(1) + '%' : '—' }}
               </span>
             </div>
-            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden mb-3">
               <div class="h-full rounded-full transition-all duration-500"
                    :class="latestMetric.cpu_percent > 80 ? 'bg-red-400' : latestMetric.cpu_percent > 50 ? 'bg-amber-400' : 'bg-emerald-400'"
                    :style="{ width: (latestMetric.cpu_percent ?? 0) + '%' }" />
+            </div>
+            <div class="h-16">
+              <AgentMetricChart :history="metricsHistory" field="cpu_percent"
+                :color="latestMetric.cpu_percent > 80 ? '#f87171' : latestMetric.cpu_percent > 50 ? '#fbbf24' : '#34d399'" />
             </div>
           </div>
 
@@ -208,13 +215,16 @@ const { canWrite } = usePermissions()
                 {{ latestMetric.ram_total_mb ? metricPct(latestMetric.ram_used_mb, latestMetric.ram_total_mb) + '%' : '—' }}
               </span>
             </div>
-            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden mb-1">
               <div class="h-full rounded-full transition-all duration-500 bg-sky-400"
                    :style="{ width: metricPct(latestMetric.ram_used_mb, latestMetric.ram_total_mb) + '%' }" />
             </div>
-            <p v-if="latestMetric.ram_total_mb" class="text-xs text-fg-subtle/40 mt-1 tabular-nums">
+            <p v-if="latestMetric.ram_total_mb" class="text-xs text-fg-subtle/40 mb-2 tabular-nums">
               {{ Math.round(latestMetric.ram_used_mb / 1024) }} / {{ Math.round(latestMetric.ram_total_mb / 1024) }} ГБ
             </p>
+            <div class="h-16">
+              <AgentMetricChart :history="metricsHistory" field="ram_pct" color="#38bdf8" />
+            </div>
           </div>
 
           <!-- Disk -->
@@ -222,18 +232,23 @@ const { canWrite } = usePermissions()
             <div class="flex items-center gap-1.5 mb-2">
               <HardDrive :size="11" class="text-fg-subtle/50" />
               <span class="text-xs text-fg-subtle/70 uppercase tracking-wider">Диск</span>
-              <span class="text-sm text-fg font-mono ml-auto tabular-nums">
+              <span class="text-sm text-fg font-mono ml-auto tabular-nums"
+                    :class="metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) > 90 ? 'text-red-400' : ''">
                 {{ latestMetric.disk_total_gb ? metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) + '%' : '—' }}
               </span>
             </div>
-            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+            <div class="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden mb-1">
               <div class="h-full rounded-full transition-all duration-500"
                    :class="metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) > 90 ? 'bg-red-400' : 'bg-violet-400'"
                    :style="{ width: metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) + '%' }" />
             </div>
-            <p v-if="latestMetric.disk_total_gb" class="text-xs text-fg-subtle/40 mt-1 tabular-nums">
+            <p v-if="latestMetric.disk_total_gb" class="text-xs text-fg-subtle/40 mb-2 tabular-nums">
               {{ latestMetric.disk_used_gb.toFixed(0) }} / {{ latestMetric.disk_total_gb.toFixed(0) }} ГБ
             </p>
+            <div class="h-16">
+              <AgentMetricChart :history="metricsHistory" field="disk_pct"
+                :color="metricPct(latestMetric.disk_used_gb, latestMetric.disk_total_gb) > 90 ? '#f87171' : '#a78bfa'" />
+            </div>
           </div>
         </div>
       </div>

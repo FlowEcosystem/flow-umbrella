@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,10 @@ class EnrollmentToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Опциональные метаданные для администратора.
     note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Максимальное количество использований (NULL = одноразовый).
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uses_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
     # В какую группу автоматически добавить агента при enrollment.
     group_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -69,8 +73,11 @@ class EnrollmentToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     @property
-    def is_used(self) -> bool:
-        return self.used_at is not None
+    def is_exhausted(self) -> bool:
+        """Токен исчерпан: одноразовый и уже использован, или достигнут лимит uses."""
+        if self.max_uses is None:
+            return self.used_at is not None
+        return self.uses_count >= self.max_uses
 
 
 class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):

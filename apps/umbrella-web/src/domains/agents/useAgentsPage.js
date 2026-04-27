@@ -1,4 +1,5 @@
 import { useAgentsStore }        from '@/domains/agents/store'
+import { useGroupsStore }        from '@/domains/groups/store'
 import { enrollmentTokensApi }   from '@/domains/agents/api'
 import { useToast }              from '@/shared/composables/useToast'
 import { usePagination }         from '@/shared/composables/usePagination'
@@ -10,8 +11,9 @@ import {
 } from '@/domains/agents/agents.utils'
 
 export function useAgentsPage() {
-  const store = useAgentsStore()
-  const toast = useToast()
+  const store       = useAgentsStore()
+  const groupsStore = useGroupsStore()
+  const toast       = useToast()
 
   usePolling(() => store.fetch(), 30_000)
 
@@ -80,11 +82,12 @@ export function useAgentsPage() {
 
   // ── enrollment tokens ─────────────────────────────────────
   const enrollOpen    = ref(false)
-  const enrollForm    = ref({ note: '', expires_in_hours: 24 })
+  const enrollForm    = ref({ note: '', expires_in_days: 1, group_id: null, max_uses: null })
   const enrollLoading = ref(false)
   const enrollError   = ref('')
   const enrollCreated = ref(null)
   const enrollCopied  = ref(false)
+  const enrollCmdCopied = ref(false)
 
   const tokenList        = ref([])
   const tokenListLoading = ref(false)
@@ -101,17 +104,27 @@ export function useAgentsPage() {
   }
 
   function openEnroll() {
-    enrollForm.value    = { note: '', expires_in_hours: 24 }
-    enrollError.value   = ''
-    enrollCreated.value = null
-    enrollCopied.value  = false
-    enrollOpen.value    = true
+    enrollForm.value      = { note: '', expires_in_days: 1, group_id: null, max_uses: null }
+    enrollError.value     = ''
+    enrollCreated.value   = null
+    enrollCopied.value    = false
+    enrollCmdCopied.value = false
+    enrollOpen.value      = true
     fetchTokenList()
+    if (!groupsStore.items.length) groupsStore.fetch()
   }
 
   function handleEnrollClose(v) {
     enrollOpen.value = v
-    if (!v) enrollCreated.value = null
+    if (!v) { enrollCreated.value = null; enrollCmdCopied.value = false }
+  }
+
+  function copyEnrollCmd() {
+    const url = import.meta.env.VITE_API_BASE_URL ?? window.location.origin
+    const cmd = `umbrella-agent --token ${enrollCreated.value.raw_token} --server ${url}`
+    navigator.clipboard.writeText(cmd)
+    enrollCmdCopied.value = true
+    setTimeout(() => { enrollCmdCopied.value = false }, 2000)
   }
 
   async function submitEnroll() {
@@ -119,8 +132,10 @@ export function useAgentsPage() {
     enrollError.value   = ''
     try {
       const result = await enrollmentTokensApi.create({
-        note:             enrollForm.value.note || null,
-        expires_in_hours: enrollForm.value.expires_in_hours,
+        note:            enrollForm.value.note || null,
+        expires_in_days: enrollForm.value.expires_in_days,
+        group_id:        enrollForm.value.group_id || null,
+        max_uses:        enrollForm.value.max_uses || null,
       })
       enrollCreated.value = result
       fetchTokenList()
@@ -132,7 +147,7 @@ export function useAgentsPage() {
   }
 
   function copyEnrollToken() {
-    navigator.clipboard.writeText(enrollCreated.value.token)
+    navigator.clipboard.writeText(enrollCreated.value.raw_token)
     enrollCopied.value = true
     setTimeout(() => { enrollCopied.value = false }, 2000)
   }
@@ -178,9 +193,10 @@ export function useAgentsPage() {
     formatLastSeen, formatDate,
     setStatus, resetFilters,
     editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-    enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied,
+    enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied, enrollCmdCopied,
     tokenList, tokenListLoading,
-    openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, revokeEnrollToken,
+    groupsStore,
+    openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, copyEnrollCmd, revokeEnrollToken,
     deleteTarget, deleteLoading, openDelete, closeDelete, confirmDelete,
   }
 }

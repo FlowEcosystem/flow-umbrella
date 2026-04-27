@@ -14,6 +14,7 @@ class EnrollmentTokenCreate(BaseModel):
     note: str | None = Field(default=None, max_length=255)
     expires_in_days: int | None = Field(default=None, ge=1, le=365)
     group_id: UUID | None = None
+    max_uses: int | None = Field(default=None, ge=2, le=1000)
 
 
 class EnrollmentTokenRead(BaseModel):
@@ -25,6 +26,8 @@ class EnrollmentTokenRead(BaseModel):
     group_id: UUID | None
     used_at: datetime | None
     used_by_agent_id: UUID | None
+    max_uses: int | None
+    uses_count: int
     created_at: datetime
 
 

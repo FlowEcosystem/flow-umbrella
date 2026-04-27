@@ -14,17 +14,20 @@ const {
   STATUS_LABELS, STATUS_DOT, AGENT_STATUSES,
   setStatus, resetFilters,
   editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-  enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied,
+  enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied, enrollCmdCopied,
   tokenList, tokenListLoading,
-  openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, revokeEnrollToken,
+  groupsStore,
+  openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, copyEnrollCmd, revokeEnrollToken,
   deleteTarget, deleteLoading, openDelete, closeDelete, confirmDelete,
 } = useAgentsPage()
 
 const {
   selectedIds, selectedCount, hasSelection,
-  bulkStatusLoading, bulkGroupLoading,
+  bulkGroupLoading,
   toggle, isSelected, selectAll, clearSelection,
-  bulkSetStatus, bulkAddToGroup,
+  bulkAddToGroup,
+  bulkDecommissionOpen, bulkDecommissionLoading,
+  openBulkDecommission, confirmBulkDecommission,
 } = useBulkAgents()
 
 const { canWrite } = usePermissions()
@@ -225,11 +228,15 @@ watch(filteredAgents, () => clearSelection())
     :error="enrollError"
     :created="enrollCreated"
     :copied="enrollCopied"
+    :cmd-copied="enrollCmdCopied"
     :token-list="tokenList"
     :list-loading="tokenListLoading"
+    :groups="groupsStore.items"
+    :groups-loading="groupsStore.isLoading"
     @update:open="handleEnrollClose"
     @submit="submitEnroll"
     @copy="copyEnrollToken"
+    @copy-cmd="copyEnrollCmd"
     @revoke="revokeEnrollToken"
   />
 
@@ -248,12 +255,22 @@ watch(filteredAgents, () => clearSelection())
     :selected-count="selectedCount"
     :total-count="pagedAgents.length"
     :all-selected="allPageSelected"
-    :status-loading="bulkStatusLoading"
     :group-loading="bulkGroupLoading"
     @clear="clearSelection"
     @select-all="handleSelectAll"
-    @set-status="bulkSetStatus"
     @add-to-group="bulkAddToGroup"
+    @decommission="openBulkDecommission"
+  />
+
+  <UiConfirmDialog
+    :open="bulkDecommissionOpen"
+    variant="danger"
+    title="Массовая деинсталляция"
+    :description="`Отправить команду деинсталляции ${selectedCount} агент${selectedCount === 1 ? 'у' : 'ам'}? Агенты удалят себя с хостов.`"
+    confirm-text="Деинсталлировать"
+    :loading="bulkDecommissionLoading"
+    @update:open="v => !v && (bulkDecommissionOpen = false)"
+    @confirm="confirmBulkDecommission"
   />
   </div>
 </template>

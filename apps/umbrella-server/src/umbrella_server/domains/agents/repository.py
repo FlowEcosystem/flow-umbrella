@@ -23,6 +23,7 @@ class AgentRepository:
         expires_at: datetime,
         note: str | None,
         group_id: UUID | None,
+        max_uses: int | None,
         created_by_id: UUID | None,
     ) -> EnrollmentToken:
         token = EnrollmentToken(
@@ -30,6 +31,7 @@ class AgentRepository:
             expires_at=expires_at,
             note=note,
             group_id=group_id,
+            max_uses=max_uses,
             created_by_id=created_by_id,
         )
         self._session.add(token)

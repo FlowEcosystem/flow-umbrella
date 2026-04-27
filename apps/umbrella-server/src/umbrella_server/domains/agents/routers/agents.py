@@ -43,6 +43,7 @@ async def create_enrollment_token(
         note=payload.note,
         expires_in_days=payload.expires_in_days,
         group_id=payload.group_id,
+        max_uses=payload.max_uses,
         created_by_id=current.id,
     )
     return EnrollmentTokenCreated(

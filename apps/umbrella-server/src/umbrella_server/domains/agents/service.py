@@ -58,11 +58,13 @@ class AgentService:
         note: str | None = None,
         expires_in_days: int | None = None,
         group_id: UUID | None = None,
+        max_uses: int | None = None,
         created_by_id: UUID | None = None,
     ) -> tuple[EnrollmentToken, str]:
-        """Создаёт одноразовый enrollment-токен.
+        """Создаёт enrollment-токен.
 
         Возвращает (token_record, raw_token). raw показывается ОДИН РАЗ.
+        max_uses=None → одноразовый; max_uses=N → токен действует N раз.
         """
         raw, token_hash = _make_token()
         days = expires_in_days or self._settings.agent_enrollment_token_ttl_days
@@ -72,10 +74,11 @@ class AgentService:
             expires_at=expires_at,
             note=note,
             group_id=group_id,
+            max_uses=max_uses,
             created_by_id=created_by_id,
         )
         await self._session.commit()
-        logger.info("enrollment_token_created", token_id=str(token.id), note=note)
+        logger.info("enrollment_token_created", token_id=str(token.id), note=note, max_uses=max_uses)
         return token, raw
 
     async def list_enrollment_tokens(self) -> list[EnrollmentToken]:
@@ -162,7 +165,7 @@ class AgentService:
         token_hash = hashlib.sha256(enrollment_token.encode()).hexdigest()
         token_record = await self._repo.get_enrollment_token_by_hash(token_hash)
 
-        if token_record is None or token_record.is_used:
+        if token_record is None or token_record.is_exhausted:
             raise EnrollmentTokenInvalidError()
 
         now = datetime.now(UTC)
@@ -192,11 +195,12 @@ class AgentService:
             "cert_expires_at": cert_expires_at,
         })
 
-        # Сжигаем токен.
-        await self._repo.update_enrollment_token(token_record, {
-            "used_at": now,
-            "used_by_agent_id": agent.id,
-        })
+        # Обновляем счётчик и (для одноразовых) фиксируем факт использования.
+        token_updates: dict = {"uses_count": token_record.uses_count + 1}
+        if token_record.max_uses is None:
+            token_updates["used_at"] = now
+            token_updates["used_by_agent_id"] = agent.id
+        await self._repo.update_enrollment_token(token_record, token_updates)
 
         # Авто-добавление в группу если задано.
         if token_record.group_id is not None:
