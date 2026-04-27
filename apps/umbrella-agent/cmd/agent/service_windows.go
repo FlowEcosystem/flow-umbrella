@@ -197,7 +197,9 @@ func stopService() error {
 func serviceStatus() (string, error) {
 	m, err := mgr.Connect()
 	if err != nil {
-		return "", fmt.Errorf("connect to SCM: %w", err)
+		// SCM требует прав администратора — возвращаем читаемое сообщение
+		// вместо падения с "access denied".
+		return "unknown (run as administrator to query SCM)", nil
 	}
 	defer m.Disconnect()
 
