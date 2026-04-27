@@ -1,6 +1,6 @@
 <script setup>
 import {
-  ArrowLeft, Pencil, KeyRound, Trash2,
+  ArrowLeft, Pencil, Trash2,
   Monitor, Clock, Calendar, Hash, FileText, Layers,
   Plus, X, Search, Loader2, ShieldCheck, ShieldOff, Globe,
   Terminal, RefreshCw, ShieldAlert, PowerOff, Cpu, MemoryStick, HardDrive,
@@ -8,7 +8,6 @@ import {
 import { useAgentDetailPage }      from '@/domains/agents/useAgentDetailPage'
 import { usePermissions }          from '@/shared/composables/usePermissions'
 import AgentEditDialog             from '@/domains/agents/ui/components/AgentEditDialog.vue'
-import AgentTokenDialog            from '@/domains/agents/ui/components/AgentTokenDialog.vue'
 import AgentCommandDialog          from '@/domains/agents/ui/components/AgentCommandDialog.vue'
 import AgentOfflineTokenDialog     from '@/domains/agents/ui/components/AgentOfflineTokenDialog.vue'
 
@@ -27,8 +26,6 @@ const {
   formatLastSeen, formatDate,
   colorDotStyle, fallbackColor,
   editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-  regenOpen, regenLoading, confirmRegen,
-  tokenData, tokenOpen, tokenCopied, copyToken,
   deleteOpen, deleteLoading, confirmDelete,
   COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
   cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand,
@@ -67,7 +64,7 @@ const { canWrite } = usePermissions()
         <div>
           <div class="flex items-center gap-3 mb-1.5">
             <h1 class="text-4xl text-fg leading-tight font-serif font-normal font-mono">
-              {{ displayAgent.hostname }}
+              {{ displayAgent.hostname ?? displayAgent.id.slice(0, 8) }}
             </h1>
             <span class="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border self-center"
                   :class="STATUS_CLASSES[displayAgent.status]">
@@ -75,7 +72,7 @@ const { canWrite } = usePermissions()
               {{ STATUS_LABELS[displayAgent.status] }}
             </span>
           </div>
-          <p class="text-sm text-fg-subtle">{{ OS_LABELS[displayAgent.os] }}</p>
+          <p class="text-sm text-fg-subtle">{{ OS_LABELS[displayAgent.os] ?? '—' }}</p>
         </div>
 
         <div v-if="canWrite" class="flex items-center gap-2">
@@ -85,16 +82,6 @@ const { canWrite } = usePermissions()
             <Pencil :size="13" />
             Редактировать
           </button>
-          <Tooltip>
-            <TooltipTrigger as-child>
-              <button @click="regenOpen = true"
-                class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
-                       text-fg-subtle hover:text-fg hover:border-white/20 transition-colors">
-                <KeyRound :size="14" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Перевыпустить enrollment-токен</TooltipContent>
-          </Tooltip>
 
           <Tooltip v-if="displayAgent?.status === 'active'">
             <TooltipTrigger as-child>
@@ -537,29 +524,11 @@ const { canWrite } = usePermissions()
       @submit="submitEdit"
     />
 
-    <AgentTokenDialog
-      v-model:open="tokenOpen"
-      :data="tokenData"
-      :copied="tokenCopied"
-      @copy="copyToken"
-    />
-
-    <UiConfirmDialog
-      :open="regenOpen"
-      variant="warning"
-      title="Перевыпуск enrollment token"
-      :description="`Выпустить новый токен для ${displayAgent?.hostname}? Текущий токен станет недействительным.`"
-      confirm-text="Выпустить токен"
-      :loading="regenLoading"
-      @update:open="v => !v && (regenOpen = false)"
-      @confirm="confirmRegen"
-    />
-
     <UiConfirmDialog
       :open="deleteOpen"
       variant="danger"
       title="Удаление агента"
-      :description="`Удалить агента ${displayAgent?.hostname}? Это действие необратимо.`"
+      :description="`Удалить агента ${displayAgent?.hostname ?? displayAgent?.id?.slice(0,8)}? Это действие необратимо.`"
       confirm-text="Удалить"
       :loading="deleteLoading"
       @update:open="v => !v && (deleteOpen = false)"
@@ -591,7 +560,7 @@ const { canWrite } = usePermissions()
       :open="decommissionOpen"
       variant="danger"
       title="Деинсталляция агента"
-      :description="`Отправить команду деинсталляции агенту ${displayAgent?.hostname}? Агент удалит себя с хоста. Это действие необратимо.`"
+      :description="`Отправить команду деинсталляции агенту ${displayAgent?.hostname ?? displayAgent?.id?.slice(0,8)}? Агент удалит себя с хоста. Это действие необратимо.`"
       confirm-text="Деинсталлировать"
       :loading="decommissionLoading"
       @update:open="v => !v && (decommissionOpen = false)"

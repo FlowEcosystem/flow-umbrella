@@ -1,7 +1,8 @@
-import { useAgentsStore }  from '@/domains/agents/store'
-import { useToast }        from '@/shared/composables/useToast'
-import { usePagination }   from '@/shared/composables/usePagination'
-import { usePolling }      from '@/shared/composables/usePolling'
+import { useAgentsStore }        from '@/domains/agents/store'
+import { enrollmentTokensApi }   from '@/domains/agents/api'
+import { useToast }              from '@/shared/composables/useToast'
+import { usePagination }         from '@/shared/composables/usePagination'
+import { usePolling }            from '@/shared/composables/usePolling'
 import {
   STATUS_LABELS, STATUS_CLASSES, STATUS_DOT,
   OS_LABELS, AGENT_STATUSES, AGENT_OS_LIST,
@@ -26,7 +27,7 @@ export function useAgentsPage() {
     if (searchQuery.value.trim()) {
       const q = searchQuery.value.trim().toLowerCase()
       list = list.filter(a =>
-        a.hostname.toLowerCase().includes(q) ||
+        a.hostname?.toLowerCase().includes(q) ||
         (a.ip_address ?? '').includes(q)
       )
     }
@@ -46,47 +47,16 @@ export function useAgentsPage() {
 
   const { page, totalPages, paged: pagedAgents, goTo } = usePagination(filteredAgents, 24)
 
-  // ── create ───────────────────────────────────────────────
-  const createOpen    = ref(false)
-  const createForm    = ref({ hostname: '', os: 'linux', notes: '' })
-  const createLoading = ref(false)
-  const createError   = ref('')
-
-  function openCreate() {
-    createForm.value  = { hostname: '', os: 'linux', notes: '' }
-    createError.value = ''
-    createOpen.value  = true
-  }
-
-  async function submitCreate() {
-    createLoading.value = true
-    createError.value   = ''
-    try {
-      const result = await store.create({
-        hostname: createForm.value.hostname,
-        os:       createForm.value.os,
-        notes:    createForm.value.notes || null,
-      })
-      createOpen.value = false
-      await store.fetch()
-      openToken(result)
-    } catch (err) {
-      createError.value = err.message ?? 'Ошибка создания'
-    } finally {
-      createLoading.value = false
-    }
-  }
-
   // ── edit ─────────────────────────────────────────────────
   const editOpen    = ref(false)
   const editTarget  = ref(null)
-  const editForm    = ref({ hostname: '', status: '', notes: '' })
+  const editForm    = ref({ notes: '' })
   const editLoading = ref(false)
   const editError   = ref('')
 
   function openEdit(agent) {
     editTarget.value = agent
-    editForm.value   = { hostname: agent.hostname, status: agent.status, notes: agent.notes ?? '' }
+    editForm.value   = { notes: agent.notes ?? '' }
     editError.value  = ''
     editOpen.value   = true
   }
@@ -97,9 +67,7 @@ export function useAgentsPage() {
     editError.value   = ''
     try {
       await store.update(editTarget.value.id, {
-        hostname: editForm.value.hostname,
-        status:   editForm.value.status,
-        notes:    editForm.value.notes || null,
+        notes: editForm.value.notes || null,
       })
       editOpen.value = false
       toast.success('Агент обновлён')
@@ -110,41 +78,72 @@ export function useAgentsPage() {
     }
   }
 
-  // ── token ────────────────────────────────────────────────
-  const tokenOpen   = ref(false)
-  const tokenData   = ref(null)
-  const tokenCopied = ref(false)
+  // ── enrollment tokens ─────────────────────────────────────
+  const enrollOpen    = ref(false)
+  const enrollForm    = ref({ note: '', expires_in_hours: 24 })
+  const enrollLoading = ref(false)
+  const enrollError   = ref('')
+  const enrollCreated = ref(null)
+  const enrollCopied  = ref(false)
 
-  function openToken(data) {
-    tokenData.value   = data
-    tokenCopied.value = false
-    tokenOpen.value   = true
-  }
+  const tokenList        = ref([])
+  const tokenListLoading = ref(false)
 
-  function copyToken() {
-    navigator.clipboard.writeText(tokenData.value.enrollment_token)
-    tokenCopied.value = true
-    setTimeout(() => { tokenCopied.value = false }, 2000)
-  }
-
-  // ── regen token confirm ───────────────────────────────────
-  const regenTarget  = ref(null)
-  const regenLoading = ref(false)
-
-  function openRegenConfirm(agent) { regenTarget.value = agent }
-  function closeRegenConfirm()     { regenTarget.value = null  }
-
-  async function confirmRegen() {
-    if (!regenTarget.value) return
-    regenLoading.value = true
+  async function fetchTokenList() {
+    tokenListLoading.value = true
     try {
-      const result = await store.regenerateToken(regenTarget.value.id)
-      regenTarget.value = null
-      openToken(result)
-    } catch (err) {
-      toast.error(err.message ?? 'Ошибка перевыпуска токена')
+      tokenList.value = await enrollmentTokensApi.list()
+    } catch {
+      tokenList.value = []
     } finally {
-      regenLoading.value = false
+      tokenListLoading.value = false
+    }
+  }
+
+  function openEnroll() {
+    enrollForm.value    = { note: '', expires_in_hours: 24 }
+    enrollError.value   = ''
+    enrollCreated.value = null
+    enrollCopied.value  = false
+    enrollOpen.value    = true
+    fetchTokenList()
+  }
+
+  function handleEnrollClose(v) {
+    enrollOpen.value = v
+    if (!v) enrollCreated.value = null
+  }
+
+  async function submitEnroll() {
+    enrollLoading.value = true
+    enrollError.value   = ''
+    try {
+      const result = await enrollmentTokensApi.create({
+        note:             enrollForm.value.note || null,
+        expires_in_hours: enrollForm.value.expires_in_hours,
+      })
+      enrollCreated.value = result
+      fetchTokenList()
+    } catch (err) {
+      enrollError.value = err.message ?? 'Ошибка создания токена'
+    } finally {
+      enrollLoading.value = false
+    }
+  }
+
+  function copyEnrollToken() {
+    navigator.clipboard.writeText(enrollCreated.value.token)
+    enrollCopied.value = true
+    setTimeout(() => { enrollCopied.value = false }, 2000)
+  }
+
+  async function revokeEnrollToken(id) {
+    try {
+      await enrollmentTokensApi.revoke(id)
+      tokenList.value = tokenList.value.filter(t => t.id !== id)
+      toast.success('Токен отозван')
+    } catch (err) {
+      toast.error(err.message ?? 'Ошибка отзыва токена')
     }
   }
 
@@ -178,10 +177,10 @@ export function useAgentsPage() {
     OS_LABELS, AGENT_STATUSES, AGENT_OS_LIST,
     formatLastSeen, formatDate,
     setStatus, resetFilters,
-    createOpen, createForm, createLoading, createError, openCreate, submitCreate,
     editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-    tokenOpen, tokenData, tokenCopied, openToken, copyToken,
-    regenTarget, regenLoading, openRegenConfirm, closeRegenConfirm, confirmRegen,
+    enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied,
+    tokenList, tokenListLoading,
+    openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, revokeEnrollToken,
     deleteTarget, deleteLoading, openDelete, closeDelete, confirmDelete,
   }
 }

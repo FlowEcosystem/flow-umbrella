@@ -2,8 +2,10 @@
 
 import enum
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, Index, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from umbrella_server.db.base import (
@@ -16,7 +18,6 @@ from umbrella_server.domains.groups.models import Group
 
 
 class AgentStatus(str, enum.Enum):
-    PENDING = "pending"
     ACTIVE = "active"
     DISABLED = "disabled"
     DECOMMISSIONED = "decommissioned"
@@ -28,18 +29,63 @@ class AgentOS(str, enum.Enum):
     MACOS = "macos"
 
 
+class EnrollmentToken(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Одноразовый токен для self-enrollment агента.
+
+    Не привязан к конкретному агенту до момента использования.
+    Агент сам создаёт свою запись при enrollment.
+    """
+    __tablename__ = "enrollment_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # Опциональные метаданные для администратора.
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # В какую группу автоматически добавить агента при enrollment.
+    group_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("groups.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Заполняется при использовании токена.
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_by_agent_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_by_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("admins.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    __table_args__ = (
+        Index("ix_enrollment_tokens_token_hash", "token_hash"),
+    )
+
+    @property
+    def is_used(self) -> bool:
+        return self.used_at is not None
+
+
 class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "agents"
 
-    hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Заполняется агентом при enrollment (до этого NULL).
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[AgentStatus] = mapped_column(
         Enum(AgentStatus, name="agent_status", native_enum=True, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
-        default=AgentStatus.PENDING,
+        default=AgentStatus.ACTIVE,
     )
-    os: Mapped[AgentOS] = mapped_column(
+    os: Mapped[AgentOS | None] = mapped_column(
         Enum(AgentOS, name="agent_os", native_enum=True, values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
+        nullable=True,
     )
     os_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     agent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -52,14 +98,7 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    # Enrollment-токен: raw показывается админу один раз при создании/регенерации,
-    # в БД только SHA-256 хэш.
-    enrollment_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    enrollment_token_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-
-    # Заполняется после enrollment агента.
+    # Заполняется после enrollment.
     agent_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cert_serial: Mapped[str | None] = mapped_column(String(64), nullable=True)
     cert_expires_at: Mapped[datetime | None] = mapped_column(
@@ -67,26 +106,13 @@ class Agent(Base, UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin):
     )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    groups: Mapped[list["Group"]] = relationship(  # noqa: F821
+    groups: Mapped[list["Group"]] = relationship(
         secondary="agent_group_memberships",
         back_populates="agents",
         lazy="selectin",
     )
 
-
     __table_args__ = (
-        # UNIQUE hostname только среди активных — позволяет пересоздать
-        # агента с тем же hostname после soft-delete.
-        Index(
-            "uq_agents_hostname_active",
-            "hostname",
-            unique=True,
-            postgresql_where="deleted_at IS NULL",
-        ),
-        # Быстрый поиск по hash при enrollment'е агента.
-        Index("ix_agents_enrollment_token_hash", "enrollment_token_hash"),
-        # Быстрый поиск по hash agent_token при каждом запросе от агента.
         Index("ix_agents_agent_token_hash", "agent_token_hash"),
-        # Для фильтров в list-endpoint'е — частый предикат.
         Index("ix_agents_status", "status"),
     )

@@ -213,7 +213,7 @@ func (a *Agent) doHeartbeat() {
 	if saveErr := a.state.Save(a.cfg.StateFile); saveErr != nil {
 		a.log.Warn("failed to save heartbeat time", "err", saveErr)
 	}
-	a.log.Debug("heartbeat ok")
+	a.log.Info("heartbeat ok")
 }
 
 // ── Command polling ──────────────────────────────────────────────────────────
@@ -393,7 +393,13 @@ func (a *Agent) doMetricsPush() {
 		a.log.Warn("metrics push failed", "err", err)
 		return
 	}
-	a.log.Debug("metrics pushed", "cpu", snap.CPUPercent, "ram_used_mb", snap.RAMUsedMB)
+	a.log.Info("metrics pushed",
+		"cpu_pct", fmt.Sprintf("%.1f%%", snap.CPUPercent),
+		"ram_used_mb", snap.RAMUsedMB,
+		"ram_total_mb", snap.RAMTotalMB,
+		"disk_used_gb", fmt.Sprintf("%.1f", snap.DiskUsedGB),
+		"disk_total_gb", fmt.Sprintf("%.1f", snap.DiskTotalGB),
+	)
 }
 
 // ── OS helpers ───────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ from umbrella_server.pki import BranchCA
 
 from umbrella_server.domains.auth.routers import admins_router, auth_router
 from umbrella_server.domains.instance.router import instance_router
-from umbrella_server.domains.agents.routers import agents_router, agent_router
+from umbrella_server.domains.agents.routers import agents_router, agent_router, enrollment_tokens_router
 from umbrella_server.domains.groups.routers import groups_router
 from umbrella_server.domains.policies.routers import policies_router, services_router
 from umbrella_server.domains.commands.routers import commands_router
@@ -122,6 +122,7 @@ def create_app() -> FastAPI:
     app.include_router(instance_router)
     app.include_router(agents_router)
     app.include_router(agent_router)
+    app.include_router(enrollment_tokens_router)
     app.include_router(groups_router)
     app.include_router(policies_router)
     app.include_router(services_router)

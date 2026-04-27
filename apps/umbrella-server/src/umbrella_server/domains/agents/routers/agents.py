@@ -1,22 +1,23 @@
-"""Админский CRUD агентов: /v1/agents/*."""
+"""Админский API агентов и enrollment-токенов."""
 
 from typing import Annotated
 from uuid import UUID
 
 from dishka.integrations.fastapi import FromDishka, inject
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from umbrella_server.core.pagination import Page, PaginationMeta, PaginationParams
 from umbrella_server.domains.agents.schemas import (
-    AgentCreate,
-    AgentCreateResponse,
     AgentDecommissionTokenResponse,
     AgentFilter,
     AgentRead,
     AgentUpdate,
+    EnrollmentTokenCreate,
+    EnrollmentTokenCreated,
+    EnrollmentTokenRead,
 )
 from umbrella_server.domains.agents.service import AgentService
-from umbrella_server.domains.auth.dependencies import require_capability
+from umbrella_server.domains.auth.dependencies import current_any_admin, require_capability
 from umbrella_server.domains.auth.models import Admin
 from umbrella_server.domains.groups.schemas import GroupRead
 from umbrella_server.domains.groups.service import GroupService
@@ -24,28 +25,53 @@ from umbrella_server.domains.policies.schemas import EffectivePolicyItem
 from umbrella_server.domains.policies.service import PolicyService
 
 agents_router = APIRouter(prefix="/v1/agents", tags=["agents"])
+enrollment_tokens_router = APIRouter(prefix="/v1/enrollment-tokens", tags=["enrollment-tokens"])
 
 
-@agents_router.post(
-    "", response_model=AgentCreateResponse, status_code=status.HTTP_201_CREATED
+# ── Enrollment tokens ────────────────────────────────────────────────────────
+
+@enrollment_tokens_router.post(
+    "", response_model=EnrollmentTokenCreated, status_code=status.HTTP_201_CREATED
 )
 @inject
-async def create_agent(
-    payload: AgentCreate,
-    _current: Annotated[Admin, Depends(require_capability("agents:write"))],
+async def create_enrollment_token(
+    payload: EnrollmentTokenCreate,
+    current: Annotated[Admin, Depends(require_capability("agents:write"))],
     service: FromDishka[AgentService],
-) -> AgentCreateResponse:
-    agent, raw_token = await service.create(
-        hostname=payload.hostname,
-        os=payload.os,
-        notes=payload.notes,
+) -> EnrollmentTokenCreated:
+    token, raw = await service.create_enrollment_token(
+        note=payload.note,
+        expires_in_days=payload.expires_in_days,
+        group_id=payload.group_id,
+        created_by_id=current.id,
     )
-    return AgentCreateResponse(
-        agent=AgentRead.model_validate(agent),
-        enrollment_token=raw_token,
-        enrollment_token_expires_at=agent.enrollment_token_expires_at, # pyright: ignore[reportArgumentType]
+    return EnrollmentTokenCreated(
+        token=EnrollmentTokenRead.model_validate(token),
+        raw_token=raw,
     )
 
+
+@enrollment_tokens_router.get("", response_model=list[EnrollmentTokenRead])
+@inject
+async def list_enrollment_tokens(
+    _current: Annotated[Admin, Depends(require_capability("agents:read"))],
+    service: FromDishka[AgentService],
+) -> list[EnrollmentTokenRead]:
+    tokens = await service.list_enrollment_tokens()
+    return [EnrollmentTokenRead.model_validate(t) for t in tokens]
+
+
+@enrollment_tokens_router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def revoke_enrollment_token(
+    token_id: UUID,
+    _current: Annotated[Admin, Depends(require_capability("agents:write"))],
+    service: FromDishka[AgentService],
+) -> None:
+    await service.revoke_enrollment_token(token_id)
+
+
+# ── Agents ───────────────────────────────────────────────────────────────────
 
 @agents_router.get("", response_model=Page[AgentRead])
 @inject
@@ -64,9 +90,7 @@ async def list_agents(
     )
     return Page[AgentRead](
         items=[AgentRead.model_validate(a) for a in items],
-        meta=PaginationMeta(
-            total=total, limit=pagination.limit, offset=pagination.offset
-        ),
+        meta=PaginationMeta(total=total, limit=pagination.limit, offset=pagination.offset),
     )
 
 
@@ -77,8 +101,7 @@ async def get_agent(
     _current: Annotated[Admin, Depends(require_capability("agents:read"))],
     service: FromDishka[AgentService],
 ) -> AgentRead:
-    agent = await service.get(agent_id)
-    return AgentRead.model_validate(agent)
+    return AgentRead.model_validate(await service.get(agent_id))
 
 
 @agents_router.patch("/{agent_id}", response_model=AgentRead)
@@ -101,7 +124,10 @@ async def delete_agent(
     _current: Annotated[Admin, Depends(require_capability("agents:write"))],
     service: FromDishka[AgentService],
 ) -> None:
-    await service.delete(agent_id)
+    try:
+        await service.delete(agent_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @agents_router.get("/{agent_id}/groups", response_model=list[GroupRead])
@@ -114,13 +140,8 @@ async def list_agent_groups(
     groups, counts = await group_service.list_groups_for_agent(agent_id)
     return [
         GroupRead(
-            id=g.id,
-            name=g.name,
-            description=g.description,
-            color=g.color,
-            agents_count=counts.get(g.id, 0),
-            created_at=g.created_at,
-            updated_at=g.updated_at,
+            id=g.id, name=g.name, description=g.description, color=g.color,
+            agents_count=counts.get(g.id, 0), created_at=g.created_at, updated_at=g.updated_at,
         )
         for g in groups
     ]
@@ -138,13 +159,8 @@ async def list_agent_policies(
     for p in policies:
         service_rules_count = sum(len(s.rules or []) for s in (p.services or []))
         result.append(EffectivePolicyItem(
-            id=p.id,
-            name=p.name,
-            kind=p.kind,
-            action=p.action,
-            is_active=p.is_active,
-            is_global=p.is_global,
-            version=p.version,
+            id=p.id, name=p.name, kind=p.kind, action=p.action,
+            is_active=p.is_active, is_global=p.is_global, version=p.version,
             rules_count=service_rules_count + len(p.custom_rules or []),
         ))
     return result
@@ -163,21 +179,3 @@ async def get_decommission_token(
     agent = await service.get(agent_id)
     token, expires_at = service.generate_decommission_token(agent)
     return AgentDecommissionTokenResponse(token=token, expires_at=expires_at)
-
-
-@agents_router.post(
-    "/{agent_id}/regenerate-enrollment-token",
-    response_model=AgentCreateResponse,
-)
-@inject
-async def regenerate_enrollment_token(
-    agent_id: UUID,
-    _current: Annotated[Admin, Depends(require_capability("agents:write"))],
-    service: FromDishka[AgentService],
-) -> AgentCreateResponse:
-    agent, raw_token = await service.regenerate_enrollment_token(agent_id)
-    return AgentCreateResponse(
-        agent=AgentRead.model_validate(agent),
-        enrollment_token=raw_token,
-        enrollment_token_expires_at=agent.enrollment_token_expires_at, # pyright: ignore[reportArgumentType]
-    )

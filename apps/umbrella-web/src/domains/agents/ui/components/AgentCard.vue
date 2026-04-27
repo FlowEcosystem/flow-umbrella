@@ -1,5 +1,5 @@
 <script setup>
-import { Pencil, KeyRound, Trash2, Check } from 'lucide-vue-next'
+import { Pencil, Trash2, Check } from 'lucide-vue-next'
 import { STATUS_LABELS, STATUS_CLASSES, STATUS_DOT, OS_LABELS, formatLastSeen } from '@/domains/agents/agents.utils'
 import { usePermissions } from '@/shared/composables/usePermissions'
 
@@ -9,7 +9,7 @@ defineProps({
   anySelected: { type: Boolean, default: false },
 })
 
-defineEmits(['edit', 'regen', 'delete', 'select'])
+defineEmits(['edit', 'delete', 'select'])
 
 const { canWrite } = usePermissions()
 </script>
@@ -50,7 +50,7 @@ const { canWrite } = usePermissions()
 
       <!-- hostname -->
       <div class="px-4 pb-3 flex-1">
-        <p class="text-base text-fg font-mono leading-tight truncate">{{ agent.hostname }}</p>
+        <p class="text-base text-fg font-mono leading-tight truncate">{{ agent.hostname ?? '—' }}</p>
         <p class="text-sm text-fg-subtle mt-1 font-mono">{{ agent.ip_address ?? '—' }}</p>
       </div>
 
@@ -76,15 +76,6 @@ const { canWrite } = usePermissions()
           </button>
         </TooltipTrigger>
         <TooltipContent>Редактировать</TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger as-child>
-          <button @click.stop="$emit('regen', agent)"
-                  class="p-1.5 rounded text-fg-subtle hover:text-fg hover:bg-white/[0.06] transition-colors">
-            <KeyRound :size="13" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Enrollment token</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger as-child>

@@ -211,8 +211,9 @@ export function useAgentDetailPage(id) {
     decommissionLoading.value = true
     try {
       await agentsApi.issueCommand(id, { type: 'decommission' })
-      await agentsStore.update(id, { status: 'decommissioned' })
       localAgent.value = { ...localAgent.value, status: 'decommissioned' }
+      const idx = agentsStore.items.findIndex(a => a.id === id)
+      if (idx !== -1) agentsStore.items[idx] = { ...agentsStore.items[idx], status: 'decommissioned' }
       decommissionOpen.value = false
       toast.success('Команда деинсталляции отправлена')
     } catch (err) {
@@ -276,17 +277,13 @@ export function useAgentDetailPage(id) {
 
   // ── edit agent ─────────────────────────────────────────────
   const editOpen    = ref(false)
-  const editForm    = ref({ hostname: '', status: '', notes: '' })
+  const editForm    = ref({ notes: '' })
   const editLoading = ref(false)
   const editError   = ref('')
 
   function openEdit() {
     if (!displayAgent.value) return
-    editForm.value  = {
-      hostname: displayAgent.value.hostname,
-      status:   displayAgent.value.status,
-      notes:    displayAgent.value.notes ?? '',
-    }
+    editForm.value  = { notes: displayAgent.value.notes ?? '' }
     editError.value = ''
     editOpen.value  = true
   }
@@ -296,9 +293,7 @@ export function useAgentDetailPage(id) {
     editError.value   = ''
     try {
       const updated = await agentsStore.update(id, {
-        hostname: editForm.value.hostname,
-        status:   editForm.value.status,
-        notes:    editForm.value.notes || null,
+        notes: editForm.value.notes || null,
       })
       localAgent.value = updated
       editOpen.value   = false
@@ -308,34 +303,6 @@ export function useAgentDetailPage(id) {
     } finally {
       editLoading.value = false
     }
-  }
-
-  // ── regen token ────────────────────────────────────────────
-  const regenOpen    = ref(false)
-  const regenLoading = ref(false)
-  const tokenData    = ref(null)
-  const tokenOpen    = ref(false)
-  const tokenCopied  = ref(false)
-
-  async function confirmRegen() {
-    regenLoading.value = true
-    try {
-      const result = await agentsStore.regenerateToken(id)
-      regenOpen.value   = false
-      tokenData.value   = result
-      tokenCopied.value = false
-      tokenOpen.value   = true
-    } catch (err) {
-      toast.error(err.message ?? 'Ошибка перевыпуска токена')
-    } finally {
-      regenLoading.value = false
-    }
-  }
-
-  function copyToken() {
-    navigator.clipboard.writeText(tokenData.value.enrollment_token)
-    tokenCopied.value = true
-    setTimeout(() => { tokenCopied.value = false }, 2000)
   }
 
   // ── delete agent ───────────────────────────────────────────
@@ -371,8 +338,6 @@ export function useAgentDetailPage(id) {
     formatLastSeen, formatDate,
     colorDotStyle, fallbackColor,
     editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-    regenOpen, regenLoading, confirmRegen,
-    tokenData, tokenOpen, tokenCopied, copyToken,
     deleteOpen, deleteLoading, confirmDelete,
     COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
     cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand, fetchCommands,

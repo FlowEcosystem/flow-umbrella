@@ -120,22 +120,24 @@ func doSetup(cfgFile string) {
 	waitForEnter()
 }
 
-// initLogging redirects slog to a rotating-append log file.
-// Returns a closer that flushes/closes the file; call defer on it.
-// Silently does nothing if logFile is empty or the file can't be opened.
+// initLogging sets up slog to write to stdout AND the log file (if configured).
+// Returns a closer for the file; call defer on it.
 func initLogging(logFile string) io.Closer {
-	if logFile == "" {
-		return io.NopCloser(nil)
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	var w io.Writer = os.Stdout
+	var closer io.Closer = io.NopCloser(nil)
+
+	if logFile != "" {
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err == nil {
+			if f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+				w = io.MultiWriter(os.Stdout, f)
+				closer = f
+			}
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
-		return io.NopCloser(nil)
-	}
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return io.NopCloser(nil)
-	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	return f
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(w, opts)))
+	return closer
 }
 
 func doRun(cfgFile string) {

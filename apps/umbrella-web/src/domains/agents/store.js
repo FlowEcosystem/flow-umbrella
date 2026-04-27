@@ -20,10 +20,6 @@ export const useAgentsStore = defineStore('agents', () => {
     }
   }
 
-  async function create(payload) {
-    return agentsApi.create(payload)
-  }
-
   async function update(id, payload) {
     const data = await agentsApi.update(id, payload)
     const idx = items.value.findIndex(a => a.id === id)
@@ -37,9 +33,5 @@ export const useAgentsStore = defineStore('agents', () => {
     total.value = Math.max(0, total.value - 1)
   }
 
-  async function regenerateToken(id) {
-    return agentsApi.regenerateToken(id)
-  }
-
-  return { items, total, isLoading, error, fetch, create, update, remove, regenerateToken }
+  return { items, total, isLoading, error, fetch, update, remove }
 })

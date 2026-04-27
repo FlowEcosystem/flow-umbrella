@@ -1,4 +1,4 @@
 from umbrella_server.domains.agents.routers.agent import agent_router
-from umbrella_server.domains.agents.routers.agents import agents_router
+from umbrella_server.domains.agents.routers.agents import agents_router, enrollment_tokens_router
 
-__all__ = ["agents_router", "agent_router"]
+__all__ = ["agents_router", "agent_router", "enrollment_tokens_router"]

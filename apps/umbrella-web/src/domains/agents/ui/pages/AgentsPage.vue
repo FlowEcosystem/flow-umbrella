@@ -1,23 +1,22 @@
 <script setup>
-import { Plus, Search, Monitor, RefreshCw, X } from 'lucide-vue-next'
+import { Plus, Search, Monitor, RefreshCw, X, Ticket } from 'lucide-vue-next'
 import { useAgentsPage }    from '@/domains/agents/useAgentsPage'
 import { useBulkAgents }    from '@/domains/agents/useBulkAgents'
 import { usePermissions }   from '@/shared/composables/usePermissions'
-import AgentCard            from '@/domains/agents/ui/components/AgentCard.vue'
-import AgentBulkBar         from '@/domains/agents/ui/components/AgentBulkBar.vue'
-import AgentCreateDialog    from '@/domains/agents/ui/components/AgentCreateDialog.vue'
-import AgentEditDialog      from '@/domains/agents/ui/components/AgentEditDialog.vue'
-import AgentTokenDialog     from '@/domains/agents/ui/components/AgentTokenDialog.vue'
+import AgentCard                    from '@/domains/agents/ui/components/AgentCard.vue'
+import AgentBulkBar                 from '@/domains/agents/ui/components/AgentBulkBar.vue'
+import AgentEditDialog              from '@/domains/agents/ui/components/AgentEditDialog.vue'
+import EnrollmentTokenCreateDialog  from '@/domains/agents/ui/components/EnrollmentTokenCreateDialog.vue'
 
 const {
   store, filteredAgents, pagedAgents, page, totalPages, goTo,
   searchQuery, activeStatus, hasFilters,
   STATUS_LABELS, STATUS_DOT, AGENT_STATUSES,
   setStatus, resetFilters,
-  createOpen, createForm, createLoading, createError, openCreate, submitCreate,
   editOpen, editForm, editLoading, editError, openEdit, submitEdit,
-  tokenOpen, tokenData, tokenCopied, copyToken,
-  regenTarget, regenLoading, openRegenConfirm, closeRegenConfirm, confirmRegen,
+  enrollOpen, enrollForm, enrollLoading, enrollError, enrollCreated, enrollCopied,
+  tokenList, tokenListLoading,
+  openEnroll, handleEnrollClose, submitEnroll, copyEnrollToken, revokeEnrollToken,
   deleteTarget, deleteLoading, openDelete, closeDelete, confirmDelete,
 } = useAgentsPage()
 
@@ -55,12 +54,12 @@ watch(filteredAgents, () => clearSelection())
         </div>
         <button
           v-if="canWrite"
-          @click="openCreate"
+          @click="openEnroll"
           class="flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-medium text-[#1c1917]"
           style="background: linear-gradient(135deg, #c4683a, #d4785a)"
         >
-          <Plus :size="15" />
-          Добавить агента
+          <Ticket :size="15" />
+          Новый токен
         </button>
       </div>
 
@@ -176,9 +175,9 @@ watch(filteredAgents, () => clearSelection())
                   class="text-xs text-accent hover:text-accent-lit transition-colors">
             Сбросить фильтры
           </button>
-          <button v-else @click="openCreate"
+          <button v-else-if="canWrite" @click="openEnroll"
                   class="text-xs text-accent hover:text-accent-lit transition-colors">
-            Добавить первого агента
+            Создать enrollment token
           </button>
         </div>
 
@@ -200,7 +199,6 @@ watch(filteredAgents, () => clearSelection())
               :any-selected="hasSelection"
               @select="toggle"
               @edit="openEdit"
-              @regen="openRegenConfirm"
               @delete="openDelete"
             />
           </TransitionGroup>
@@ -212,13 +210,6 @@ watch(filteredAgents, () => clearSelection())
 
     </div>
 
-  <AgentCreateDialog
-    v-model:open="createOpen"
-    :form="createForm"
-    :loading="createLoading"
-    :error="createError"
-    @submit="submitCreate"
-  />
   <AgentEditDialog
     v-model:open="editOpen"
     :form="editForm"
@@ -226,29 +217,27 @@ watch(filteredAgents, () => clearSelection())
     :error="editError"
     @submit="submitEdit"
   />
-  <AgentTokenDialog
-    v-model:open="tokenOpen"
-    :data="tokenData"
-    :copied="tokenCopied"
-    @copy="copyToken"
-  />
 
-  <UiConfirmDialog
-    :open="!!regenTarget"
-    variant="warning"
-    title="Перевыпуск enrollment token"
-    :description="`Выпустить новый токен для ${regenTarget?.hostname}? Текущий токен станет недействительным.`"
-    confirm-text="Выпустить токен"
-    :loading="regenLoading"
-    @update:open="v => !v && closeRegenConfirm()"
-    @confirm="confirmRegen"
+  <EnrollmentTokenCreateDialog
+    :open="enrollOpen"
+    :form="enrollForm"
+    :loading="enrollLoading"
+    :error="enrollError"
+    :created="enrollCreated"
+    :copied="enrollCopied"
+    :token-list="tokenList"
+    :list-loading="tokenListLoading"
+    @update:open="handleEnrollClose"
+    @submit="submitEnroll"
+    @copy="copyEnrollToken"
+    @revoke="revokeEnrollToken"
   />
 
   <UiConfirmDialog
     :open="!!deleteTarget"
     variant="danger"
     title="Удаление агента"
-    :description="`Удалить агента ${deleteTarget?.hostname}? Это действие необратимо.`"
+    :description="`Удалить агента ${deleteTarget?.hostname ?? deleteTarget?.id?.slice(0,8)}? Это действие необратимо.`"
     confirm-text="Удалить"
     :loading="deleteLoading"
     @update:open="v => !v && closeDelete()"

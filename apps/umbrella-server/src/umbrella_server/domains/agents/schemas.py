@@ -8,15 +8,36 @@ from pydantic import BaseModel, ConfigDict, Field
 from umbrella_server.domains.agents.models import AgentOS, AgentStatus
 
 
-class AgentCreate(BaseModel):
-    hostname: str = Field(min_length=1, max_length=255)
-    os: AgentOS
-    notes: str | None = None
+# ── Enrollment tokens ────────────────────────────────────────────────────────
 
+class EnrollmentTokenCreate(BaseModel):
+    note: str | None = Field(default=None, max_length=255)
+    expires_in_days: int | None = Field(default=None, ge=1, le=365)
+    group_id: UUID | None = None
+
+
+class EnrollmentTokenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    note: str | None
+    expires_at: datetime
+    group_id: UUID | None
+    used_at: datetime | None
+    used_by_agent_id: UUID | None
+    created_at: datetime
+
+
+class EnrollmentTokenCreated(BaseModel):
+    """Ответ при создании токена. raw_token показывается ОДИН РАЗ."""
+    token: EnrollmentTokenRead
+    raw_token: str
+
+
+# ── Agents ───────────────────────────────────────────────────────────────────
 
 class AgentUpdate(BaseModel):
-    hostname: str | None = Field(default=None, min_length=1, max_length=255)
-    status: AgentStatus | None = None
+    """Только поля, которые может менять администратор вручную."""
     notes: str | None = None
 
 
@@ -24,9 +45,9 @@ class AgentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    hostname: str
+    hostname: str | None
     status: AgentStatus
-    os: AgentOS
+    os: AgentOS | None
     os_version: str | None
     agent_version: str | None
     ip_address: str | None
@@ -37,35 +58,18 @@ class AgentRead(BaseModel):
     updated_at: datetime
 
 
-class AgentCreateResponse(BaseModel):
-    """Ответ на создание агента и регенерацию токена.
-
-    enrollment_token отдаётся в СЫРОМ виде ОДИН РАЗ. Повторно его не получить —
-    в БД хранится только hash. Если потерян — регенерировать через отдельную ручку.
-    """
-    model_config = ConfigDict(from_attributes=True)
-
-    agent: AgentRead
-    enrollment_token: str
-    enrollment_token_expires_at: datetime
-
-
 class AgentDecommissionTokenResponse(BaseModel):
-    """Offline-токен для деинсталляции агента без обращения к серверу."""
     token: str
     expires_at: datetime
 
 
 class AgentFilter(BaseModel):
-    """Query-параметры list-endpoint'а. Используется через Depends()."""
     status: list[AgentStatus] | None = None
     os: AgentOS | None = None
     search: str | None = Field(default=None, max_length=255)
 
 
-# ---------------------------------------------------------------------------
-# Agent-facing schemas (enrollment, heartbeat, policy polling)
-# ---------------------------------------------------------------------------
+# ── Agent-facing schemas ─────────────────────────────────────────────────────
 
 class AgentEnrollRequest(BaseModel):
     enrollment_token: str
@@ -86,8 +90,6 @@ class AgentEnrollResponse(BaseModel):
     policy_poll_interval_sec: int
     command_poll_interval_sec: int
     metrics_push_interval_sec: int
-    # PEM-публичный ключ для верификации offline-токенов деинсталляции.
-    # None если сервер не настроен (SERVER_DECOMMISSION_KEY_PATH не задан).
     decommission_pubkey: str | None = None
 
 
