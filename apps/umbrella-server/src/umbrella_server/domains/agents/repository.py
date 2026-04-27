@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Select, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from umbrella_server.domains.agents.models import Agent, AgentOS, AgentStatus, EnrollmentToken
@@ -104,7 +105,8 @@ class AgentRepository:
 
     async def add_to_group(self, agent_id: UUID, group_id: UUID) -> None:
         await self._session.execute(
-            agent_group_memberships.insert().values(agent_id=agent_id, group_id=group_id)
+            pg_insert(agent_group_memberships)
+            .values(agent_id=agent_id, group_id=group_id)
             .on_conflict_do_nothing()
         )
 
