@@ -84,7 +84,7 @@ const { canWrite } = usePermissions()
             Редактировать
           </button>
 
-          <Tooltip v-if="displayAgent?.status === 'active'">
+          <Tooltip v-if="displayAgent?.status === 'active' || displayAgent?.status === 'disabled'">
             <TooltipTrigger as-child>
               <button
                 @click="generateOfflineToken"
