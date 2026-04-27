@@ -113,12 +113,20 @@ const { canWrite } = usePermissions()
           <Tooltip>
             <TooltipTrigger as-child>
               <button @click="deleteOpen = true"
-                class="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08]
-                       text-fg-subtle hover:text-red-400/60 hover:border-red-900/30 transition-colors">
+                :disabled="displayAgent?.status === 'active'"
+                class="h-8 w-8 flex items-center justify-center rounded-lg border transition-colors
+                       disabled:opacity-30 disabled:cursor-not-allowed"
+                :class="displayAgent?.status === 'active'
+                  ? 'border-white/[0.06] text-fg-subtle/40'
+                  : 'border-white/[0.08] text-fg-subtle hover:text-red-400/60 hover:border-red-900/30'">
                 <Trash2 :size="14" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Удалить запись агента</TooltipContent>
+            <TooltipContent>
+              {{ displayAgent?.status === 'active'
+                ? 'Нельзя удалить активного агента — сначала деинсталлируйте'
+                : 'Удалить запись агента' }}
+            </TooltipContent>
           </Tooltip>
         </div>
       </div>

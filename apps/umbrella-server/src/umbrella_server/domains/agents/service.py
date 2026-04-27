@@ -129,16 +129,21 @@ class AgentService:
         return agent
 
     async def delete(self, agent_id: UUID) -> None:
-        """Soft-delete. Разрешён только для decommissioned агентов."""
+        """Soft-delete агента.
+
+        Разрешён для decommissioned (штатный вывод) и disabled (машина
+        недоступна — очищать нечего, удаляем только запись).
+        Для active агентов требует предварительной деинсталляции.
+        """
         agent = await self.get(agent_id)
-        if agent.status != AgentStatus.DECOMMISSIONED:
+        if agent.status == AgentStatus.ACTIVE:
             raise ValueError(
-                f"Agent {agent_id} is {agent.status.value}, not decommissioned. "
-                "Send decommission command first."
+                f"Agent {agent_id} is active. "
+                "Send decommission command first, or wait until agent goes offline."
             )
         await self._repo.soft_delete(agent)
         await self._session.commit()
-        logger.info("agent_deleted", agent_id=str(agent.id))
+        logger.info("agent_deleted", agent_id=str(agent.id), status=agent.status.value)
 
     # ── Enrollment ───────────────────────────────────────────────────────────
 
