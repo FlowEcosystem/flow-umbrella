@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -106,32 +105,7 @@ func installService(_ string) error {
 		fmt.Printf("warning: could not set recovery actions: %v\n", err)
 	}
 
-	// Restrict the service DACL: only SYSTEM has full control.
-	// Admins and Users can query status but cannot stop, delete, or reconfigure.
-	const sddl = `D:(A;;CCLCSWRPWPDTLOCRSDRCWDWO;;;SY)(A;;CCLCRC;;;BA)(A;;CCLCRC;;;BU)`
-	if err := exec.Command("sc", "sdset", serviceName, sddl).Run(); err != nil {
-		fmt.Printf("warning: could not set service DACL: %v\n", err)
-	}
-
-	// Lock the installation directory: SYSTEM full control, everyone else read+execute.
-	protectInstallDir(exePath)
 	return nil
-}
-
-// protectInstallDir sets an ACL on the agent directory so only SYSTEM can
-// write or delete files. Uses locale-independent SID syntax.
-func protectInstallDir(exePath string) {
-	dir := filepath.Dir(exePath)
-	err := exec.Command("icacls", dir,
-		"/inheritance:r",
-		"/grant:r", "*S-1-5-18:(OI)(CI)(F)",   // SYSTEM: full control
-		"/grant:r", "*S-1-5-32-544:(OI)(CI)(RX)", // Administrators: read+execute
-		"/grant:r", "*S-1-5-32-545:(OI)(CI)(RX)", // Users: read+execute
-		"/T",
-	).Run()
-	if err != nil {
-		fmt.Printf("warning: could not set directory ACL: %v\n", err)
-	}
 }
 
 func uninstallService() error {
@@ -158,63 +132,7 @@ func uninstallService() error {
 		}
 	}
 
-	if err := s.Delete(); err != nil {
-		// Tamper-protection DACL blocks admin delete → escalate to SYSTEM.
-		s.Close()
-		m.Disconnect()
-		return uninstallViaSystem()
-	}
-	return nil
-}
-
-// uninstallViaSystem bypasses the tamper-protection DACL by running the
-// stop+delete sequence as SYSTEM via a temporary scheduled task.
-// This is safe: the caller has already verified the offline token or
-// confirmed the agent is not enrolled.
-func uninstallViaSystem() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get exe path: %w", err)
-	}
-	exe, _ = filepath.Abs(exe)
-	dir := filepath.Dir(exe)
-
-	// Single batch script — runs all steps sequentially as SYSTEM.
-	bat := fmt.Sprintf(
-		"@echo off\r\n"+
-			"sc.exe sdset %s D:(A;;CCLCSWRPWPDTLOCRSDRCWDWO;;;BA)\r\n"+ // restore admin perms
-			"sc.exe stop %s\r\n"+
-			"ping 127.0.0.1 -n 3 > nul\r\n"+ // wait ~2s for stop
-			"sc.exe delete %s\r\n"+
-			"icacls.exe \"%s\" /reset /T /C /Q\r\n",
-		serviceName, serviceName, serviceName, dir,
-	)
-
-	batPath := filepath.Join(os.TempDir(), "umbrella-uninstall.bat")
-	if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
-		return fmt.Errorf("write uninstall script: %w", err)
-	}
-	defer os.Remove(batPath)
-
-	taskName := "UmbrellaAgentUninstall"
-	tr := fmt.Sprintf("cmd.exe /c \"%s\"", batPath)
-
-	_ = exec.Command("schtasks", "/delete", "/tn", taskName, "/f").Run()
-	if err := exec.Command("schtasks", "/create",
-		"/tn", taskName, "/tr", tr,
-		"/sc", "once", "/st", "00:00", "/ru", "SYSTEM", "/f",
-	).Run(); err != nil {
-		return fmt.Errorf("create system task: %w", err)
-	}
-	if err := exec.Command("schtasks", "/run", "/tn", taskName).Run(); err != nil {
-		_ = exec.Command("schtasks", "/delete", "/tn", taskName, "/f").Run()
-		return fmt.Errorf("run system task: %w", err)
-	}
-
-	// Wait for the task to complete (stop + delete takes ~3-4s).
-	time.Sleep(5 * time.Second)
-	_ = exec.Command("schtasks", "/delete", "/tn", taskName, "/f").Run()
-	return nil
+	return s.Delete()
 }
 
 func startService() error {
@@ -246,11 +164,8 @@ func stopService() error {
 	}
 	defer s.Close()
 
-	if _, err = s.Control(svc.Stop); err != nil {
-		// DACL blocks admin stop → let uninstallViaSystem handle it.
-		return err
-	}
-	return nil
+	_, err = s.Control(svc.Stop)
+	return err
 }
 
 func serviceStatus() (string, error) {
