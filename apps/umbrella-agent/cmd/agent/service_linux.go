@@ -38,10 +38,7 @@ func runAsService(run func(<-chan struct{})) error {
 }
 
 func installService(cfgFile string) error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get exe path: %w", err)
-	}
+	exePath := installedExePath()
 
 	execStart := exePath + " run"
 	if cfgFile != "" {

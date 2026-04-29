@@ -2,7 +2,13 @@ COMPOSE_FILE := infra/docker/docker-compose.yml
 SECRETS_FILE := infra/secrets/.env
 APP_DIR      := apps/umbrella-server
 WEB_DIR      := apps/umbrella-web
+AGENT_DIR    := apps/umbrella-agent
 COMPOSE      := docker compose --env-file $(SECRETS_FILE) -f $(COMPOSE_FILE)
+
+RELEASES_DIR ?= /var/lib/umbrella-server/releases
+VERSION      ?= 0.1.0
+AGENT_NAME   := umbrella-agent
+AGENT_PKG    := ./cmd/agent
 
 s ?= server
 
@@ -48,6 +54,11 @@ help:
 	@printf "  $(_G)%-18s$(_R) %s\n" "test"      "pytest"
 	@printf "\n$(_C)  PKI$(_R)  $(_GR)─────────────────────────────────────────────────$(_R)\n"
 	@printf "  $(_G)%-18s$(_R) %-36s $(_GR)%s$(_R)\n" "gen-nginx-cert" "Сертификат nginx от Branch CA" "h=hostname"
+	@printf "\n$(_C)  Агент$(_R)  $(_GR)────────────────────────────────────────────$(_R)\n"
+	@printf "  $(_G)%-18s$(_R) %-36s $(_GR)%s$(_R)\n" "release-windows"   "Сборка агента windows/amd64"  "[v=0.1.0]"
+	@printf "  $(_G)%-18s$(_R) %-36s $(_GR)%s$(_R)\n" "release-linux"     "Сборка агента linux/amd64"    "[v=0.1.0]"
+	@printf "  $(_G)%-18s$(_R) %-36s $(_GR)%s$(_R)\n" "release-linux-arm64" "Сборка агента linux/arm64"  "[v=0.1.0]"
+	@printf "  $(_G)%-18s$(_R) %s\n"                   "release-all"       "Все платформы"
 	@printf "\n$(_C)  Очистка$(_R)  $(_GR)──────────────────────────────────────────$(_R)\n"
 	@printf "  $(_G)%-18s$(_R) %s  $(_RE)%s$(_R)\n" "clean" "Остановить и удалить volumes" "⚠ сотрёт БД"
 	@printf "  $(_G)%-18s$(_R) %s\n"               "prune" "Удалить висящие образы и сети"
@@ -171,6 +182,34 @@ gen-nginx-cert:
 	@printf "$(_C)  → Генерирую TLS-сертификат сервера для $(_B)$(h)$(_R)$(_C)...$(_R)\n\n"
 	@$(COMPOSE) exec server python scripts/gen_nginx_cert.py $(h)
 	@printf "\n$(_G)  ✓ Файлы в apps/umbrella-server/pki/$(_R)\n\n"
+
+# ── Агент ─────────────────────────────────────────────────────────────────────
+.PHONY: release-windows
+release-windows:
+	@printf "$(_C)  → Сборка windows/amd64 v$(VERSION)...$(_R)\n"
+	@cd $(AGENT_DIR) && GOOS=windows GOARCH=amd64 go build \
+	  -ldflags "-X main.Version=$(VERSION)" \
+	  -o $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_windows_amd64.exe $(AGENT_PKG)
+	@printf "$(_G)  ✓ $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_windows_amd64.exe$(_R)\n\n"
+
+.PHONY: release-linux
+release-linux:
+	@printf "$(_C)  → Сборка linux/amd64 v$(VERSION)...$(_R)\n"
+	@cd $(AGENT_DIR) && GOOS=linux GOARCH=amd64 go build \
+	  -ldflags "-X main.Version=$(VERSION)" \
+	  -o $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_linux_amd64 $(AGENT_PKG)
+	@printf "$(_G)  ✓ $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_linux_amd64$(_R)\n\n"
+
+.PHONY: release-linux-arm64
+release-linux-arm64:
+	@printf "$(_C)  → Сборка linux/arm64 v$(VERSION)...$(_R)\n"
+	@cd $(AGENT_DIR) && GOOS=linux GOARCH=arm64 go build \
+	  -ldflags "-X main.Version=$(VERSION)" \
+	  -o $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_linux_arm64 $(AGENT_PKG)
+	@printf "$(_G)  ✓ $(RELEASES_DIR)/$(AGENT_NAME)_$(VERSION)_linux_arm64$(_R)\n\n"
+
+.PHONY: release-all
+release-all: release-windows release-linux release-linux-arm64
 
 # ── Очистка ───────────────────────────────────────────────────────────────────
 .PHONY: clean

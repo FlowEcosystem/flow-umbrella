@@ -11,6 +11,8 @@ import AgentEditDialog             from '@/domains/agents/ui/components/AgentEdi
 import AgentCommandDialog          from '@/domains/agents/ui/components/AgentCommandDialog.vue'
 import AgentOfflineTokenDialog     from '@/domains/agents/ui/components/AgentOfflineTokenDialog.vue'
 import AgentMetricChart            from '@/domains/agents/ui/components/AgentMetricChart.vue'
+import AgentProcessTable           from '@/domains/agents/ui/components/AgentProcessTable.vue'
+import ProcessPolicyFormDialog     from '@/domains/policies/ui/components/ProcessPolicyFormDialog.vue'
 
 const route = useRoute()
 const id    = route.params.id
@@ -29,11 +31,14 @@ const {
   editOpen, editForm, editLoading, editError, openEdit, submitEdit,
   deleteOpen, deleteLoading, confirmDelete,
   COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
-  cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand,
+  cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand, fetchCommands,
   offlineTokenOpen, offlineTokenData, offlineTokenLoading, offlineTokenCopied,
   generateOfflineToken, copyOfflineToken,
   decommissionOpen, decommissionLoading, confirmDecommission,
   metricsHistory, metricsLoading, latestMetric, metricPct,
+  processes, processesLoading, fetchProcesses,
+  killLoading, killProcess,
+  blockProcOpen, blockProcTarget, blockProcLoading, blockProcError, openBlockProc, submitBlockProc,
 } = useAgentDetailPage(id)
 
 const { canWrite } = usePermissions()
@@ -448,6 +453,49 @@ const { canWrite } = usePermissions()
         </div>
       </div>
 
+      <!-- processes -->
+      <div class="bg-bg-raised border border-white/[0.06] rounded-xl overflow-hidden mt-3">
+
+        <div class="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
+          <div class="flex items-center gap-2">
+            <Cpu :size="13" class="text-fg-subtle/60" />
+            <span class="text-xs text-fg-subtle uppercase tracking-wider">Процессы</span>
+            <span v-if="processes.length" class="text-xs text-fg-subtle/50 tabular-nums">{{ processes.length }}</span>
+          </div>
+          <button
+            @click="fetchProcesses"
+            :disabled="processesLoading"
+            class="h-6 w-6 flex items-center justify-center rounded-md text-fg-subtle/50
+                   hover:text-fg hover:bg-white/[0.06] transition-colors disabled:opacity-40"
+          >
+            <RefreshCw :size="11" :class="processesLoading ? 'animate-spin' : ''" />
+          </button>
+        </div>
+
+        <div v-if="processesLoading && !processes.length" class="flex flex-col gap-1.5 p-4">
+          <div v-for="i in 4" :key="i" class="flex items-center gap-3">
+            <Skeleton class="h-3.5 w-32 rounded bg-white/[0.06]" />
+            <Skeleton class="h-3 w-10 rounded bg-white/[0.04] ml-auto" />
+            <Skeleton class="h-3 w-14 rounded bg-white/[0.04]" />
+          </div>
+        </div>
+
+        <div v-else-if="!processes.length" class="flex items-center justify-center py-7">
+          <p class="text-xs text-fg-subtle/60">Данных о процессах нет — агент ещё не прислал снимок</p>
+        </div>
+
+        <div v-else class="px-3 py-3">
+          <AgentProcessTable
+            :processes="processes"
+            :kill-loading="killLoading"
+            :can-write="canWrite"
+            @kill="killProcess"
+            @block="openBlockProc"
+          />
+        </div>
+
+      </div>
+
       <!-- commands -->
       <div class="bg-bg-raised border border-white/[0.06] rounded-xl overflow-hidden mt-3">
 
@@ -538,6 +586,15 @@ const { canWrite } = usePermissions()
     </template>
 
     <!-- dialogs -->
+    <ProcessPolicyFormDialog
+      :open="blockProcOpen"
+      :target="blockProcTarget"
+      :loading="blockProcLoading"
+      :error="blockProcError"
+      @update:open="blockProcOpen = $event"
+      @submit="submitBlockProc"
+    />
+
     <AgentEditDialog
       v-if="displayAgent"
       v-model:open="editOpen"
@@ -566,6 +623,7 @@ const { canWrite } = usePermissions()
       :payload="cmdPayload"
       :loading="cmdLoading"
       :error="cmdError"
+      :agent-os="displayAgent?.os ?? null"
       @update:open="v => !v && (cmdOpen = false)"
       @update:type="cmdType = $event"
       @update:payload="cmdPayload = $event"

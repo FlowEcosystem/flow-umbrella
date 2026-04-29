@@ -18,6 +18,7 @@ class CommandType(str, enum.Enum):
     APPLY_CONFIG = "apply_config"
     SYNC_POLICIES = "sync_policies"
     DECOMMISSION = "decommission"
+    KILL_PROCESS = "kill_process"
 
 
 class CommandStatus(str, enum.Enum):

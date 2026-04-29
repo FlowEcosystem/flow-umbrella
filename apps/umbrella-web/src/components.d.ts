@@ -62,6 +62,7 @@ declare module 'vue' {
     UiConfirmDialog: typeof import('./shared/ui/UiConfirmDialog.vue')['default']
     UiLoadingOverlay: typeof import('./shared/ui/UiLoadingOverlay.vue')['default']
     UiPagination: typeof import('./shared/ui/UiPagination.vue')['default']
+    UiSelect: typeof import('./shared/ui/select/UiSelect.vue')['default']
     UiToastContainer: typeof import('./shared/ui/UiToastContainer.vue')['default']
   }
 }

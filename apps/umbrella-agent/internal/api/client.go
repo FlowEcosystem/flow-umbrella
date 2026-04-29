@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -160,6 +161,18 @@ type MetricsRequest struct {
 	DiskTotalGB float64   `json:"disk_total_gb"`
 }
 
+type ProcessItem struct {
+	Name       string  `json:"name"`
+	PID        int     `json:"pid"`
+	CPUPercent float64 `json:"cpu_percent"`
+	MemMB      int64   `json:"mem_mb"`
+}
+
+type ProcessPushRequest struct {
+	CollectedAt time.Time     `json:"collected_at"`
+	Processes   []ProcessItem `json:"processes"`
+}
+
 type HeartbeatRequest struct {
 	OSVersion    string `json:"os_version,omitempty"`
 	AgentVersion string `json:"agent_version,omitempty"`
@@ -230,4 +243,37 @@ func (c *Client) RenewCert(req RenewRequest) (RenewResponse, error) {
 
 func (c *Client) PushMetrics(req MetricsRequest) error {
 	return c.post("/v1/agent/metrics", req, nil)
+}
+
+func (c *Client) PushProcesses(req ProcessPushRequest) error {
+	return c.post("/v1/agent/processes", req, nil)
+}
+
+// DownloadRelease downloads a server-hosted agent release binary to dst.
+// Uses the agent's authenticated HTTP client (Bearer token + mTLS cert).
+func (c *Client) DownloadRelease(releaseID, dst string) error {
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/v1/releases/"+releaseID+"/download", nil)
+	if err != nil {
+		return err
+	}
+	if c.agentToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.agentToken)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned %d", resp.StatusCode)
+	}
+
+	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
 }

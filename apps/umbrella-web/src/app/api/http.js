@@ -9,6 +9,10 @@ export function setAccessToken(token) {
   _accessToken = token
 }
 
+export function getAccessToken() {
+  return _accessToken
+}
+
 const http = axios.create({
   baseURL,
   withCredentials: true,

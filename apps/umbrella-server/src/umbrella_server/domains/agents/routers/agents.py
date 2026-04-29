@@ -1,10 +1,12 @@
 """Админский API агентов и enrollment-токенов."""
 
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
 from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from umbrella_server.core.pagination import Page, PaginationMeta, PaginationParams
 from umbrella_server.domains.agents.schemas import (
@@ -19,10 +21,13 @@ from umbrella_server.domains.agents.schemas import (
 from umbrella_server.domains.agents.service import AgentService
 from umbrella_server.domains.auth.dependencies import current_any_admin, require_capability
 from umbrella_server.domains.auth.models import Admin
+from umbrella_server.domains.audit.service import AuditService
+from umbrella_server.domains.auth.service import AuthService
 from umbrella_server.domains.groups.schemas import GroupRead
 from umbrella_server.domains.groups.service import GroupService
 from umbrella_server.domains.policies.schemas import EffectivePolicyItem
 from umbrella_server.domains.policies.service import PolicyService
+from umbrella_server.shared.sse_broker import agent_broker
 
 agents_router = APIRouter(prefix="/v1/agents", tags=["agents"])
 enrollment_tokens_router = APIRouter(prefix="/v1/enrollment-tokens", tags=["enrollment-tokens"])
@@ -124,11 +129,21 @@ async def delete_agent(
     agent_id: UUID,
     _current: Annotated[Admin, Depends(require_capability("agents:write"))],
     service: FromDishka[AgentService],
+    audit: FromDishka[AuditService],
 ) -> None:
+    agent = await service.get(agent_id)
     try:
         await service.delete(agent_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    await audit.log(
+        "agent.deleted",
+        entity_type="agent",
+        entity_id=str(agent_id),
+        admin_id=_current.id,
+        admin_email=_current.email,
+        details={"hostname": agent.hostname, "os": agent.os},
+    )
 
 
 @agents_router.get("/{agent_id}/groups", response_model=list[GroupRead])
@@ -180,3 +195,35 @@ async def get_decommission_token(
     agent = await service.get(agent_id)
     token, expires_at = service.generate_decommission_token(agent)
     return AgentDecommissionTokenResponse(token=token, expires_at=expires_at)
+
+
+@agents_router.get("/{agent_id}/stream")
+@inject
+async def agent_stream(
+    agent_id: UUID,
+    token: str,
+    auth_service: FromDishka[AuthService],
+) -> StreamingResponse:
+    try:
+        await auth_service.authenticate(token)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+    q = agent_broker.subscribe(str(agent_id))
+
+    async def generator():
+        try:
+            while True:
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=25)
+                    yield f"event: {msg['event']}\ndata: {msg['data']}\n\n"
+                except asyncio.TimeoutError:
+                    yield "event: ping\ndata: {}\n\n"
+        finally:
+            agent_broker.unsubscribe(str(agent_id), q)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

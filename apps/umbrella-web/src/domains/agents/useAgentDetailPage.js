@@ -1,9 +1,11 @@
-import { useAgentsStore }  from '@/domains/agents/store'
-import { useGroupsStore }  from '@/domains/groups/store'
-import { useToast }        from '@/shared/composables/useToast'
-import { usePolling }      from '@/shared/composables/usePolling'
-import { agentsApi }       from '@/domains/agents/api'
-import { groupsApi }       from '@/domains/groups/api'
+import { useAgentsStore }   from '@/domains/agents/store'
+import { useGroupsStore }   from '@/domains/groups/store'
+import { useToast }         from '@/shared/composables/useToast'
+import { usePolling }       from '@/shared/composables/usePolling'
+import { useAgentStream }   from '@/shared/composables/useAgentStream'
+import { agentsApi }        from '@/domains/agents/api'
+import { groupsApi }        from '@/domains/groups/api'
+import { policiesApi }      from '@/domains/policies/api'
 import {
   STATUS_LABELS, STATUS_CLASSES, STATUS_DOT, OS_LABELS, formatLastSeen, formatDate,
 } from '@/domains/agents/agents.utils'
@@ -99,13 +101,98 @@ export function useAgentDetailPage(id) {
     }
   }
 
+  // ── processes ──────────────────────────────────────────────
+  const processes        = ref([])
+  const processesLoading = ref(false)
+
+  async function fetchProcesses() {
+    processesLoading.value = true
+    try {
+      const snap = await agentsApi.getProcesses(id)
+      processes.value = snap?.processes ?? []
+    } catch {
+      processes.value = []
+    } finally {
+      processesLoading.value = false
+    }
+  }
+
+  const killLoading = ref({})
+
+  async function killProcess(name) {
+    killLoading.value = { ...killLoading.value, [name]: true }
+    try {
+      const cmd = await agentsApi.issueCommand(id, { type: 'kill_process', payload: { name } })
+      commands.value = [cmd, ...commands.value]
+      toast.success(`Kill команда отправлена: ${name}`)
+    } catch (err) {
+      toast.error(err.message ?? 'Ошибка')
+    } finally {
+      const next = { ...killLoading.value }
+      delete next[name]
+      killLoading.value = next
+    }
+  }
+
+  // ── block process via policy ───────────────────────────────
+  const blockProcOpen    = ref(false)
+  const blockProcTarget  = ref(null)
+  const blockProcLoading = ref(false)
+  const blockProcError   = ref('')
+
+  function openBlockProc(name) {
+    blockProcTarget.value = {
+      name: `Block ${name}`,
+      description: '',
+      action: 'block',
+      is_active: true,
+      services: [],
+      custom_rules: [{ type: 'process', value: name }],
+    }
+    blockProcError.value  = ''
+    blockProcOpen.value   = true
+  }
+
+  async function submitBlockProc(form) {
+    blockProcLoading.value = true
+    blockProcError.value   = ''
+    try {
+      await policiesApi.create({ ...form, kind: 'process' })
+      blockProcOpen.value = false
+      toast.success('Политика блокировки создана')
+    } catch (err) {
+      blockProcError.value = err.message ?? 'Ошибка создания политики'
+    } finally {
+      blockProcLoading.value = false
+    }
+  }
+
   onMounted(async () => {
     await fetchAgent()
-    await Promise.all([fetchGroups(), fetchPolicies(), fetchCommands(), fetchMetrics()])
+    await Promise.all([fetchGroups(), fetchPolicies(), fetchCommands(), fetchMetrics(), fetchProcesses()])
     if (!groupsStore.items.length) groupsStore.fetch()
   })
 
   usePolling(pollAgent, 30_000, { immediate: false })
+
+  useAgentStream(id, {
+    onAgent(data) {
+      localAgent.value = data
+      const idx = agentsStore.items.findIndex(a => a.id === id)
+      if (idx !== -1) agentsStore.items[idx] = data
+    },
+    onMetrics(data) {
+      metricsHistory.value = [data, ...metricsHistory.value].slice(0, 288)
+    },
+    onProcesses(data) {
+      processes.value = data.processes ?? []
+    },
+    onCommand(data) {
+      const idx = commands.value.findIndex(c => c.id === data.id)
+      if (idx !== -1) commands.value[idx] = data
+      else commands.value = [data, ...commands.value]
+    },
+  })
 
   // ── commands ───────────────────────────────────────────────
   const commands        = ref([])
@@ -342,5 +429,8 @@ export function useAgentDetailPage(id) {
     COMMAND_TYPES, COMMAND_TYPE_LABELS, COMMAND_STATUS_LABELS,
     cmdOpen, cmdType, cmdPayload, cmdLoading, cmdError, openCmdDialog, submitCommand, fetchCommands,
     metricsHistory, metricsLoading, latestMetric, metricPct,
+    processes, processesLoading, fetchProcesses,
+    killLoading, killProcess,
+    blockProcOpen, blockProcTarget, blockProcLoading, blockProcError, openBlockProc, submitBlockProc,
   }
 }

@@ -44,6 +44,7 @@ const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
   animation: false,
+  devicePixelRatio: window.devicePixelRatio || 2,
   interaction: { mode: 'index', intersect: false },
   plugins: {
     legend: { display: false },

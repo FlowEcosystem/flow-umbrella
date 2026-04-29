@@ -1,7 +1,7 @@
 <script setup>
-import { Monitor, Users, ShieldCheck, Package, ArrowUpRight } from 'lucide-vue-next'
-import { useDashboardPage } from '@/domains/dashboard/useDashboardPage'
-import { STATUS_DOT, formatLastSeen } from '@/domains/agents/agents.utils'
+import { Monitor, Users, ShieldCheck, Package, ArrowUpRight, AlertTriangle, Activity, RefreshCw } from 'lucide-vue-next'
+import { useDashboardPage, DANGEROUS } from '@/domains/dashboard/useDashboardPage'
+import { STATUS_DOT, formatLastSeen }  from '@/domains/agents/agents.utils'
 import { fallbackColor, colorDotStyle } from '@/domains/groups/groups.utils'
 
 const {
@@ -10,6 +10,8 @@ const {
   totalPolicies, activePolicies, inactivePolicies, blockPolicies, allowPolicies,
   totalServices,
   recentAgents, topGroups,
+  processStats, processStatsLoading, dangerousProcesses, topProcesses, maxSeen,
+  loadProcessStats,
   greeting, todayDate,
 } = useDashboardPage()
 </script>
@@ -112,6 +114,34 @@ const {
         <p class="text-[11px] uppercase tracking-wider text-fg-subtle/50 mt-3">Сервисы</p>
       </RouterLink>
 
+    </div>
+
+    <!-- dangerous processes alert -->
+    <div v-if="dangerousProcesses.length"
+         class="rounded-xl border border-red-900/30 bg-red-950/15 p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <AlertTriangle :size="13" class="text-red-400" />
+        <span class="text-xs font-medium text-red-300">
+          Обнаружено подозрительных процессов: {{ dangerousProcesses.length }}
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <div
+          v-for="s in dangerousProcesses"
+          :key="s.process_name"
+          class="flex items-center gap-2 rounded-lg bg-red-950/30 border border-red-900/25 px-3 py-1.5"
+        >
+          <AlertTriangle :size="10" class="text-red-400 shrink-0" />
+          <div>
+            <div class="text-xs font-mono text-red-300">{{ s.process_name }}</div>
+            <div class="text-[10px] text-red-400/50 mt-0.5">
+              {{ DANGEROUS[s.process_name.toLowerCase()] }}
+              · {{ s.agent_count }} {{ s.agent_count === 1 ? 'агент' : 'агентов' }}
+              · {{ s.total_seen }} запусков
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- middle row: agent status | OS + policy breakdown -->
@@ -296,5 +326,89 @@ const {
       </div>
 
     </div>
+
+    <!-- top processes across all agents -->
+    <div class="bg-bg-raised border border-white/[0.06] rounded-xl overflow-hidden">
+
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-white/[0.05]">
+        <div class="flex items-center gap-2">
+          <Activity :size="13" class="text-fg-subtle/60" />
+          <span class="text-xs text-fg-subtle uppercase tracking-widest">Топ процессов</span>
+          <span class="text-xs text-fg-subtle/40">— по всем агентам</span>
+        </div>
+        <button
+          @click="loadProcessStats"
+          :disabled="processStatsLoading"
+          class="h-6 w-6 flex items-center justify-center rounded-md text-fg-subtle/50
+                 hover:text-fg hover:bg-white/[0.06] transition-colors disabled:opacity-40"
+        >
+          <RefreshCw :size="11" :class="processStatsLoading ? 'animate-spin' : ''" />
+        </button>
+      </div>
+
+      <!-- column headers -->
+      <div class="grid grid-cols-[24px_1fr_80px_80px_160px] gap-3 px-5 py-2 border-b border-white/[0.04]">
+        <span />
+        <span class="text-xs text-fg-subtle/50">Процесс</span>
+        <span class="text-xs text-fg-subtle/50 text-right">Агентов</span>
+        <span class="text-xs text-fg-subtle/50 text-right">Запусков</span>
+        <span class="text-xs text-fg-subtle/50">Частота</span>
+      </div>
+
+      <!-- skeleton -->
+      <div v-if="processStatsLoading && !processStats.length" class="divide-y divide-white/[0.03]">
+        <div v-for="i in 6" :key="i"
+             class="grid grid-cols-[24px_1fr_80px_80px_160px] gap-3 px-5 py-2.5 items-center">
+          <div class="h-3 w-3 rounded bg-white/[0.05] animate-pulse" />
+          <div class="h-3 rounded bg-white/[0.05] w-36 animate-pulse" />
+          <div class="h-3 rounded bg-white/[0.05] w-8 ml-auto animate-pulse" />
+          <div class="h-3 rounded bg-white/[0.05] w-10 ml-auto animate-pulse" />
+          <div class="h-1 rounded-full bg-white/[0.05] animate-pulse" />
+        </div>
+      </div>
+
+      <!-- empty -->
+      <div v-else-if="!topProcesses.length"
+           class="flex items-center justify-center py-8">
+        <p class="text-xs text-fg-subtle/40">Данных ещё нет — агенты ещё не прислали снимки процессов</p>
+      </div>
+
+      <!-- rows -->
+      <div v-else class="divide-y divide-white/[0.03]">
+        <div
+          v-for="(s, i) in topProcesses"
+          :key="s.process_name"
+          class="grid grid-cols-[24px_1fr_80px_80px_160px] gap-3 px-5 py-2.5 items-center
+                 hover:bg-white/[0.02] transition-colors"
+          :class="DANGEROUS[s.process_name.toLowerCase()] ? 'bg-red-950/10' : ''"
+        >
+          <span class="text-xs text-fg-subtle/30 tabular-nums text-right">{{ i + 1 }}</span>
+
+          <div class="flex items-center gap-1.5 min-w-0">
+            <AlertTriangle
+              v-if="DANGEROUS[s.process_name.toLowerCase()]"
+              :size="10" class="text-red-400 shrink-0"
+              :title="DANGEROUS[s.process_name.toLowerCase()]"
+            />
+            <span class="text-xs font-mono text-fg truncate" :title="s.process_name">
+              {{ s.process_name }}
+            </span>
+          </div>
+
+          <span class="text-xs tabular-nums text-fg-subtle/60 text-right">{{ s.agent_count }}</span>
+          <span class="text-xs tabular-nums text-fg-subtle/70 text-right">{{ s.total_seen }}</span>
+
+          <div class="h-1 rounded-full bg-white/[0.06] overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all"
+              :class="DANGEROUS[s.process_name.toLowerCase()] ? 'bg-red-500/50' : 'bg-emerald-500/50'"
+              :style="{ width: (s.total_seen / maxSeen * 100) + '%' }"
+            />
+          </div>
+        </div>
+      </div>
+
+    </div>
+
   </div>
 </template>

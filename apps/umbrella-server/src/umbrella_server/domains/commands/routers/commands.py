@@ -6,6 +6,7 @@ from uuid import UUID
 from dishka.integrations.fastapi import FromDishka, inject
 from fastapi import APIRouter, Depends, status
 
+from umbrella_server.domains.audit.service import AuditService
 from umbrella_server.domains.auth.dependencies import require_capability
 from umbrella_server.domains.auth.models import Admin
 from umbrella_server.domains.commands.schemas import CommandCreate, CommandRead
@@ -21,6 +22,7 @@ async def issue_command(
     payload: CommandCreate,
     _current: Annotated[Admin, Depends(require_capability("commands:write"))],
     service: FromDishka[CommandService],
+    audit: FromDishka[AuditService],
 ) -> CommandRead:
     cmd = await service.issue(
         agent_id=agent_id,
@@ -28,6 +30,14 @@ async def issue_command(
         payload=payload.payload,
         issued_by_id=_current.id,
         expires_in_sec=payload.expires_in_sec,
+    )
+    await audit.log(
+        "command.issued",
+        entity_type="command",
+        entity_id=str(cmd.id),
+        details={"command_type": payload.type.value, "agent_id": str(agent_id), "payload": payload.payload},
+        admin_id=_current.id,
+        admin_email=_current.email,
     )
     return CommandRead.model_validate(cmd)
 

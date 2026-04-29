@@ -598,60 +598,72 @@ outer:
 
 // ── Final install screen (first-run) ─────────────────────
 
+type installStep struct {
+	label string
+	fn    func() error
+}
+
+func installSteps(cfgFile string) []installStep {
+	return []installStep{
+		{"Installing executable ", copyToInstallDir},
+		{"Adding to system PATH ", addToSystemPath},
+		{"Installing service    ", func() error { return installService(cfgFile) }},
+		{"Starting service      ", startService},
+	}
+}
+
+// runInstallSteps executes each step, printing inline progress.
+// Returns true if all steps succeeded.
+func runInstallSteps(steps []installStep) bool {
+	for _, step := range steps {
+		fmt.Printf("  %s  %s  ", ac(aDim, "·"), step.label)
+		os.Stdout.Sync()
+		if err := step.fn(); err != nil {
+			fmt.Printf("%s\n", ac(aRed, "FAILED"))
+			fmt.Printf("\n  %s\n", ac(aRed, err.Error()))
+			return false
+		}
+		fmt.Printf("%s\n", ac(aGreen, "OK"))
+	}
+	return true
+}
+
 func finalInstallScreen(cfgFile string, cfg config.Config, s *state.State, keys <-chan string) {
 	sep := wizardSep()
 	fmt.Print("\033[2J\033[H")
-	fmt.Printf("  %s\n", ac(aBold+aCyan, "УСТАНОВКА СЛУЖБЫ"))
+	fmt.Printf("  %s\n", ac(aBold+aCyan, "INSTALLING SERVICE"))
 	fmt.Println(sep)
 	fmt.Println()
 
-	fmt.Printf("  %s\n", ac(aBold, "Итоговая конфигурация:"))
-	fmt.Printf("    Сервер:  %s\n", cfg.ServerURL)
 	if s.IsEnrolled() {
+		fmt.Printf("  %s  %s\n", ac(aDim, "Server "), cfg.ServerURL)
 		id := s.AgentID
-		if len(id) > 20 {
+		if len(id) > 36 {
 			id = id[:8] + "..."
 		}
-		fmt.Printf("    Агент:   %s\n", id)
-		authMode := "Bearer token"
-		if s.CertPEM != "" {
-			authMode = "mTLS (сертификат)"
-		}
-		fmt.Printf("    Auth:    %s\n", authMode)
+		fmt.Printf("  %s  %s\n", ac(aDim, "Agent  "), id)
+		fmt.Println()
 	}
-	fmt.Println()
 
 	svcSt, _ := serviceStatus()
 	if svcSt == "active" || svcSt == "running" {
-		fmt.Printf("  %s  Служба уже запущена (%s)\n", ac(aGreen, "✓"), svcSt)
+		fmt.Printf("  %s  Service already running (%s)\n", ac(aGreen, "✓"), svcSt)
 		fmt.Println()
 		fmt.Println(sep)
-		fmt.Printf("  %s\n", ac(aDim, "Готово! Нажмите любую клавишу..."))
+		fmt.Printf("  %s\n", ac(aDim, "Done! Press any key..."))
 		<-keys
 		return
 	}
 
-	fmt.Printf("  Установка службы...  ")
-	if err := installService(cfgFile); err != nil {
-		fmt.Printf("%s\n\n  %v\n\n", ac(aRed, "ОШИБКА"), err)
-		fmt.Println(sep)
-		fmt.Printf("  %s\n", ac(aDim, "Нажмите любую клавишу..."))
-		<-keys
-		return
-	}
-	fmt.Println(ac(aGreen, "OK"))
-
-	fmt.Printf("  Запуск службы...     ")
-	if err := startService(); err != nil {
-		fmt.Printf("%s\n\n  %v\n", ac(aRed, "ОШИБКА"), err)
-	} else {
-		fmt.Println(ac(aGreen, "OK"))
-		fmt.Printf("\n  %s\n", ac(aGreen, "✓ Агент запущен как системная служба."))
-	}
+	ok := runInstallSteps(installSteps(cfgFile))
 
 	fmt.Println()
 	fmt.Println(sep)
-	fmt.Printf("  %s\n", ac(aDim, "Готово! Нажмите любую клавишу..."))
+	if ok {
+		fmt.Printf("  %s  Agent is running as a system service.\n", ac(aGreen, "✓"))
+		fmt.Println()
+	}
+	fmt.Printf("  %s\n", ac(aDim, "Press any key..."))
 	<-keys
 }
 
@@ -660,30 +672,31 @@ func finalInstallScreen(cfgFile string, cfg config.Config, s *state.State, keys 
 func serviceInstallPrompt(cfgFile string, keys <-chan string) {
 	sep := wizardSep()
 	fmt.Print("\033[2J\033[H")
-	fmt.Printf("  %s\n\n", ac(aBold, "Служба не запущена. Установить?"))
-	fmt.Printf("  %s\n", ac(aDim, "[ y ] Да   [ n ] Пропустить"))
+	fmt.Printf("  %s\n", ac(aBold+aCyan, "SERVICE NOT RUNNING"))
+	fmt.Println(sep)
+	fmt.Println()
+	fmt.Printf("  The agent service is not installed or stopped.\n")
+	fmt.Println()
+	fmt.Printf("  %s\n", ac(aDim, "[ y ] Install & start   [ n ] Skip"))
 
 	for {
 		k := <-keys
 		switch k {
 		case "y", "Y":
 			fmt.Print("\033[2J\033[H")
-			fmt.Printf("  Установка службы...  ")
-			if err := installService(cfgFile); err != nil {
-				fmt.Printf("%s\n\n  %v\n", ac(aRed, "ОШИБКА"), err)
-			} else {
-				fmt.Println(ac(aGreen, "OK"))
-				fmt.Printf("  Запуск службы...     ")
-				if err := startService(); err != nil {
-					fmt.Printf("%s\n\n  %v\n", ac(aRed, "ОШИБКА"), err)
-				} else {
-					fmt.Println(ac(aGreen, "OK"))
-					fmt.Printf("\n  %s\n", ac(aGreen, "✓ Агент запущен."))
-				}
-			}
+			fmt.Printf("  %s\n", ac(aBold+aCyan, "INSTALLING SERVICE"))
+			fmt.Println(sep)
+			fmt.Println()
+
+			ok := runInstallSteps(installSteps(cfgFile))
+
 			fmt.Println()
 			fmt.Println(sep)
-			fmt.Printf("  %s\n", ac(aDim, "Нажмите любую клавишу..."))
+			if ok {
+				fmt.Printf("  %s  Agent is running as a system service.\n", ac(aGreen, "✓"))
+				fmt.Println()
+			}
+			fmt.Printf("  %s\n", ac(aDim, "Press any key..."))
 			<-keys
 			return
 		case "n", "N", "q", "Q", kCtrlC, kEnter:
@@ -757,28 +770,36 @@ func tuiLogs(logFile string, keys <-chan string) bool {
 }
 
 func drawLogs(logFile string) {
-	sep := wizardSep()
+	const w = 72
+	sep := "  " + strings.Repeat("─", w)
+	ts := time.Now().Format("15:04:05")
+	title := "AGENT LOGS"
+	pad := w - len(title) - len(ts)
+	if pad < 1 {
+		pad = 1
+	}
+
 	fmt.Print("\033[2J\033[H")
-	fmt.Printf("  %s\n", ac(aBold+aCyan, "ЛОГИ АГЕНТА"))
+	fmt.Printf("  %s%s%s\n", ac(aBold+aCyan, title), strings.Repeat(" ", pad), ac(aDim, ts))
 	fmt.Println(sep)
 	fmt.Println()
 
 	if logFile == "" {
-		fmt.Printf("  %s\n", ac(aDim, "лог-файл не настроен (log_file в конфиге)"))
+		fmt.Printf("  %s\n", ac(aDim, "log_file not configured"))
 	} else {
-		lines := logTail(logFile, 50)
+		lines := logTail(logFile, 40)
 		if len(lines) == 0 {
-			fmt.Printf("  %s\n", ac(aDim, "нет записей (служба ещё не запускалась)"))
+			fmt.Printf("  %s\n", ac(aDim, "no entries — service has not started yet"))
 		} else {
 			for _, line := range lines {
-				fmt.Printf("  %s\n", colorLogLine(line))
+				fmt.Printf("  %s\n", formatLogLine(line))
 			}
 		}
 	}
 
 	fmt.Println()
 	fmt.Println(sep)
-	fmt.Printf("  %s\n", ac(aDim, "[b] монитор   [r] обновить   auto-refresh: 2s"))
+	fmt.Printf("  %s\n", ac(aDim, "[b] monitor   [r] refresh   auto-refresh: 2s"))
 }
 
 // logTail reads the last n lines from path.
@@ -823,120 +844,146 @@ func tuiPolicies(stateFile string, keys <-chan string) bool {
 }
 
 func drawPolicies(stateFile string) {
-	const w = 52
+	const w = 60
 	sep := "  " + strings.Repeat("─", w)
 
 	fmt.Print("\033[2J\033[H")
 
-	title := "ПОЛИТИКИ АГЕНТА"
+	title := "APPLIED POLICIES"
 	ts := time.Now().Format("15:04:05")
 	pad := w - len(title) - len(ts)
 	if pad < 1 {
 		pad = 1
 	}
-	fmt.Printf("  %s%s%s\n", ac(aBold+aCyan, title), strings.Repeat(" ", pad), ts)
+	fmt.Printf("  %s%s%s\n", ac(aBold+aCyan, title), strings.Repeat(" ", pad), ac(aDim, ts))
 	fmt.Println(sep)
 	fmt.Println()
 
 	ps, psErr := enforce.LoadState(stateFile)
 	if psErr != nil {
-		fmt.Printf("  %s\n", ac(aRed, "Ошибка чтения: "+psErr.Error()))
-		fmt.Printf("  %s\n", ac(aDim, enforce.PolicyStatePath(stateFile)))
+		fmt.Printf("  %s  %s\n", ac(aRed, "✗"), ac(aRed, psErr.Error()))
 		fmt.Println()
 		fmt.Println(sep)
-		fmt.Printf("  %s\n", ac(aDim, "[b] монитор   [r] обновить   auto-refresh: 5s"))
+		fmt.Printf("  %s\n", ac(aDim, "[b] monitor   [r] refresh   auto-refresh: 5s"))
 		return
 	}
 	if ps == nil {
-		fmt.Printf("  %s\n", ac(aYellow, "Нет данных — агент ещё не опросил сервер."))
-		fmt.Printf("  %s\n", ac(aDim, "Ожидаемый файл: "+enforce.PolicyStatePath(stateFile)))
+		fmt.Printf("  %s\n", ac(aYellow, "No data — agent has not polled the server yet."))
 		fmt.Println()
 		fmt.Println(sep)
-		fmt.Printf("  %s\n", ac(aDim, "[b] монитор   [r] обновить   auto-refresh: 5s"))
+		fmt.Printf("  %s\n", ac(aDim, "[b] monitor   [r] refresh   auto-refresh: 5s"))
 		return
 	}
 
 	age := time.Since(ps.AppliedAt)
-	ageStr := humanDur(age) + " назад"
+	ageStr := humanDur(age) + " ago"
 	if age < 5*time.Second {
-		ageStr = "только что"
+		ageStr = "just now"
 	}
-	fmt.Printf("  Обновлено: %s  (%s)   всего: %d\n",
+	fmt.Printf("  Updated %s  %s   %s\n",
 		ac(aDim, ps.AppliedAt.Local().Format("15:04:05")),
-		ac(aDim, ageStr),
-		len(ps.Policies),
+		ac(aDim, "("+ageStr+")"),
+		ac(aBold, fmt.Sprintf("%d policies", len(ps.Policies))),
 	)
 	fmt.Println()
 
 	if len(ps.Policies) == 0 {
-		fmt.Printf("  %s\n", ac(aDim, "Политик нет."))
+		fmt.Printf("  %s\n", ac(aDim, "No policies assigned."))
 		fmt.Println()
 		fmt.Println(sep)
-		fmt.Printf("  %s\n", ac(aDim, "[b] монитор   [r] обновить   auto-refresh: 5s"))
+		fmt.Printf("  %s\n", ac(aDim, "[b] monitor   [r] refresh   auto-refresh: 5s"))
 		return
 	}
 
 	for _, p := range ps.Policies {
-		// Header: action badge + kind + name
-		var actionColor, actionBadge string
+		var actionColor, badge string
 		if p.Action == "block" {
 			actionColor = aRed
-			actionBadge = "● BLOCK"
+			badge = ac(aRed, "✗ BLOCK")
 		} else {
 			actionColor = aGreen
-			actionBadge = "○ ALLOW"
+			badge = ac(aGreen, "✓ ALLOW")
 		}
 		name := p.Name
 		if name == "" {
 			name = p.ID
 		}
+		kind := p.Kind
+		if kind == "" {
+			kind = "policy"
+		}
 		fmt.Printf("  %s  %s  %s\n",
-			ac(actionColor, actionBadge),
-			ac(aDim, p.Kind),
-			ac(aBold, name),
+			badge,
+			ac(aDim, fmt.Sprintf("%-10s", kind)),
+			ac(actionColor+";1", name),
 		)
 
-		// Rule type summary lines.
+		var parts []string
 		if p.Domains > 0 {
-			fmt.Printf("      %s  домены: %d\n", rulesIcon(p.Domains), p.Domains)
+			parts = append(parts, fmt.Sprintf("%d domains", p.Domains))
 		}
 		if p.IPs > 0 {
-			fmt.Printf("      %s  IP-адреса: %d\n", rulesIcon(p.IPs), p.IPs)
+			parts = append(parts, fmt.Sprintf("%d IPs", p.IPs))
 		}
 		if p.Processes > 0 {
-			fmt.Printf("      %s  процессы: %d\n", rulesIcon(p.Processes), p.Processes)
+			parts = append(parts, fmt.Sprintf("%d processes", p.Processes))
 		}
-		if p.URLs > 0 {
-			fmt.Printf("      %s  URL: %d %s\n", ac(aDim, "·"), p.URLs, ac(aDim, "(не применяется в phase 1)"))
-		}
-		if p.Domains == 0 && p.IPs == 0 && p.Processes == 0 && p.URLs == 0 {
-			fmt.Printf("      %s\n", ac(aDim, "· нет правил"))
+		if len(parts) > 0 {
+			fmt.Printf("          %s\n", ac(aDim, strings.Join(parts, "  ·  ")))
+		} else {
+			fmt.Printf("          %s\n", ac(aDim, "no rules"))
 		}
 		fmt.Println()
 	}
 
 	fmt.Println(sep)
-	fmt.Printf("  %s\n", ac(aDim, "[b] монитор   [r] обновить   auto-refresh: 5s"))
+	fmt.Printf("  %s\n", ac(aDim, "[b] monitor   [r] refresh   auto-refresh: 5s"))
 }
 
-func rulesIcon(count int) string {
-	if count > 0 {
-		return ac(aGreen, "✓")
+// formatLogLine parses a slog text-format line and applies colour by level.
+// slog text format: time=... level=INFO msg="..." key=val ...
+func formatLogLine(line string) string {
+	if line == "" {
+		return ""
 	}
-	return ac(aDim, "·")
-}
 
-// colorLogLine colours a slog text-format line by level keyword.
-func colorLogLine(line string) string {
-	up := strings.ToUpper(line)
-	switch {
-	case strings.Contains(up, "LEVEL=ERROR") || strings.Contains(up, " ERR "):
-		return ac(aRed, line)
-	case strings.Contains(up, "LEVEL=WARN"):
-		return ac(aYellow, line)
-	case strings.Contains(up, "LEVEL=DEBUG"):
-		return ac(aDim, line)
+	// Extract level for colouring.
+	level := ""
+	if i := strings.Index(line, "level="); i >= 0 {
+		rest := line[i+6:]
+		if j := strings.IndexByte(rest, ' '); j >= 0 {
+			level = strings.ToUpper(rest[:j])
+		} else {
+			level = strings.ToUpper(rest)
+		}
+	}
+
+	// Shorten the timestamp: "time=2006-01-02T15:04:05.000Z" → "15:04:05"
+	out := line
+	if i := strings.Index(line, "time="); i == 0 {
+		end := strings.IndexByte(line[5:], ' ')
+		if end >= 0 {
+			raw := line[5 : 5+end]
+			// Extract HH:MM:SS from ISO timestamp
+			if t := strings.Index(raw, "T"); t >= 0 && len(raw) > t+8 {
+				hms := raw[t+1 : t+9]
+				out = ac(aDim, hms) + " " + line[5+end+1:]
+			}
+		}
+	}
+
+	// Colour the level token inside the line.
+	levelToken := "level=" + strings.ToLower(level)
+	switch level {
+	case "ERROR", "ERR":
+		out = strings.Replace(out, levelToken, ac(aRed, levelToken), 1)
+		return ac(aRed, "▸") + " " + out
+	case "WARN", "WARNING":
+		out = strings.Replace(out, levelToken, ac(aYellow, levelToken), 1)
+		return ac(aYellow, "▸") + " " + out
+	case "DEBUG":
+		return ac(aDim, "· "+out)
 	default:
-		return line
+		return "  " + out
 	}
 }

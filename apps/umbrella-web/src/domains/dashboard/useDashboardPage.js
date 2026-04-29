@@ -3,6 +3,27 @@ import { useGroupsStore }   from '@/domains/groups/store'
 import { usePoliciesStore } from '@/domains/policies/store'
 import { useServicesStore } from '@/domains/policies/servicesStore'
 import { useAuthStore }     from '@/domains/auth/store'
+import { processStatsApi }  from '@/domains/agents/api'
+import { isSystemProcess }  from '@/shared/utils/processUtils'
+
+export const DANGEROUS = {
+  'xray.exe':        'VPN/proxy bypass (Xray)',
+  'v2ray.exe':       'VPN/proxy bypass (V2Ray)',
+  'sing-box.exe':    'VPN/proxy bypass (sing-box)',
+  'trojan.exe':      'Proxy bypass (Trojan)',
+  'shadowsocks.exe': 'Proxy bypass',
+  'clash.exe':       'Proxy client (Clash)',
+  'tor.exe':         'Anonymization (Tor)',
+  'torbrowser.exe':  'Anonymization browser',
+  'openvpn.exe':     'VPN client',
+  'wireguard.exe':   'WireGuard VPN',
+  'ngrok.exe':       'Reverse tunnel (ngrok)',
+  'frpc.exe':        'Reverse tunnel (FRP)',
+  'proxifier.exe':   'Traffic proxy',
+  'mimikatz.exe':    'Credential dumping',
+  'procdump.exe':    'Memory dump tool',
+  'psexec.exe':      'Remote execution tool',
+}
 
 export function useDashboardPage() {
   const agentsStore   = useAgentsStore()
@@ -16,6 +37,7 @@ export function useDashboardPage() {
     if (!groupsStore.items.length)   groupsStore.fetch()
     if (!policiesStore.items.length) policiesStore.fetch()
     if (!servicesStore.items.length) servicesStore.fetch()
+    loadProcessStats()
   })
 
   // ── agent stats ───────────────────────────────────────────
@@ -78,6 +100,29 @@ export function useDashboardPage() {
       .slice(0, 6)
   )
 
+  // ── process stats ─────────────────────────────────────────
+  const processStats        = ref([])
+  const processStatsLoading = ref(false)
+
+  async function loadProcessStats() {
+    processStatsLoading.value = true
+    try {
+      processStats.value = await processStatsApi.getGlobal(50)
+    } catch { /* silent */ } finally {
+      processStatsLoading.value = false
+    }
+  }
+
+  const dangerousProcesses = computed(() =>
+    processStats.value.filter(s => DANGEROUS[s.process_name.toLowerCase()])
+  )
+
+  const topProcesses = computed(() =>
+    processStats.value.filter(s => !isSystemProcess(s.process_name)).slice(0, 10)
+  )
+
+  const maxSeen = computed(() => topProcesses.value[0]?.total_seen ?? 1)
+
   // ── greeting ──────────────────────────────────────────────
   const greeting = computed(() => {
     const h    = new Date().getHours()
@@ -96,6 +141,8 @@ export function useDashboardPage() {
     totalPolicies, activePolicies, inactivePolicies, blockPolicies, allowPolicies,
     totalServices,
     recentAgents, topGroups,
+    processStats, processStatsLoading, dangerousProcesses, topProcesses, maxSeen,
+    loadProcessStats,
     greeting, todayDate,
   }
 }

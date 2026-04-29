@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # --- agent intervals ---
     policy_poll_interval_sec: int = 60
     command_poll_interval_sec: int = 15
-    metrics_push_interval_sec: int = 60
+    metrics_push_interval_sec: int = 30
     # Сколько секунд без heartbeat → статус агента переходит в disabled.
     # По умолчанию 45 с = 3× heartbeat-интервал (15 с).
     agent_offline_timeout_sec: int = 45
@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     cookie_domain: str | None = None
+
+    # --- releases ---
+    releases_dir: str = "/var/lib/umbrella-server/releases"
 
     # --- agents ---
     agent_enrollment_token_ttl_days: int = 7

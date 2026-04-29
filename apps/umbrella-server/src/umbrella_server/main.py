@@ -25,6 +25,11 @@ from umbrella_server.domains.groups.routers import groups_router
 from umbrella_server.domains.policies.routers import policies_router, services_router
 from umbrella_server.domains.commands.routers import commands_router
 from umbrella_server.domains.metrics.routers import metrics_router
+from umbrella_server.domains.processes.routers import processes_router
+from umbrella_server.domains.agents.routers.stream import stream_router
+from umbrella_server.domains.audit.routers import audit_router
+from umbrella_server.domains.releases.routers import admin_releases_router, agent_releases_router
+from umbrella_server.shared.sse_broker import agent_broker, GLOBAL_KEY
 
 
 async def _stale_agent_loop(
@@ -44,6 +49,7 @@ async def _stale_agent_loop(
                 if count:
                     await session.commit()
                     logger.info("agents_marked_offline", count=count)
+                    await agent_broker.publish(GLOBAL_KEY, "agents_refresh", {})
         except Exception as exc:  # noqa: BLE001
             logger.error("stale_agent_check_failed", error=str(exc))
 
@@ -128,6 +134,11 @@ def create_app() -> FastAPI:
     app.include_router(services_router)
     app.include_router(commands_router)
     app.include_router(metrics_router)
+    app.include_router(processes_router)
+    app.include_router(stream_router)
+    app.include_router(audit_router)
+    app.include_router(admin_releases_router)
+    app.include_router(agent_releases_router)
 
     return app
 

@@ -63,10 +63,10 @@ func defaults() Config {
 	return Config{
 		StateFile:              DefaultStateFile(),
 		LogFile:                DefaultLogFile(),
-		HeartbeatIntervalSec:   30,
+		HeartbeatIntervalSec:   15,
 		CommandPollIntervalSec: 10,
 		PolicyPollIntervalSec:  60,
-		MetricsPushIntervalSec: 60,
+		MetricsPushIntervalSec: 30,
 		CertRenewBeforeDays:    7,
 		AgentVersion:           "0.1.0",
 	}

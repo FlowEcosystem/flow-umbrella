@@ -4,6 +4,7 @@ import { enrollmentTokensApi }   from '@/domains/agents/api'
 import { useToast }              from '@/shared/composables/useToast'
 import { usePagination }         from '@/shared/composables/usePagination'
 import { usePolling }            from '@/shared/composables/usePolling'
+import { lastAgentUpdate, agentsNeedRefresh } from '@/domains/agents/agentStreamEvents'
 import {
   STATUS_LABELS, STATUS_CLASSES, STATUS_DOT,
   OS_LABELS, AGENT_STATUSES, AGENT_OS_LIST,
@@ -16,6 +17,20 @@ export function useAgentsPage() {
   const toast       = useToast()
 
   usePolling(() => store.fetch(), 30_000)
+
+  // SSE: instant update when agent sends heartbeat
+  watch(lastAgentUpdate, data => {
+    if (!data) return
+    const idx = store.items.findIndex(a => a.id === data.id)
+    if (idx !== -1) store.items[idx] = data
+  })
+
+  // SSE: re-fetch all when stale-agent loop marks some offline
+  watch(agentsNeedRefresh, async needsRefresh => {
+    if (!needsRefresh) return
+    agentsNeedRefresh.value = false
+    await store.fetch()
+  })
 
   // ── локальная фильтрация ──────────────────────────────────
   const searchQuery  = ref('')

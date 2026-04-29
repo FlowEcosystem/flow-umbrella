@@ -43,11 +43,10 @@ const emit = defineEmits(['update:open', 'submit'])
 
         <div class="flex flex-col gap-1.5">
           <label class="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">OS</label>
-          <select v-model="form.os"
-                  class="h-9 w-full rounded-md border border-white/[0.08] bg-bg px-3 text-sm text-fg
-                         focus:outline-none focus:border-accent/50 transition-colors">
-            <option v-for="os in AGENT_OS_LIST" :key="os" :value="os">{{ OS_LABELS[os] }}</option>
-          </select>
+          <UiSelect v-model="form.os"
+                    :options="AGENT_OS_LIST.map(os => ({ value: os, label: OS_LABELS[os] }))"
+                    class="h-9 w-full rounded-md border border-white/[0.08] bg-bg px-3 text-sm text-fg
+                           hover:border-white/20" />
         </div>
 
         <div class="flex flex-col gap-1.5">

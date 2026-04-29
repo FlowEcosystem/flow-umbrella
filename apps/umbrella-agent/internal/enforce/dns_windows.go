@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 // dnsSinkhole is a minimal UDP DNS server: NXDOMAIN for blocked domains,
@@ -30,6 +32,11 @@ var (
 	sinkholeMu sync.Mutex
 	activeSink *dnsSinkhole
 	savedDNS   map[string][]string // interface → original DNS servers (in-memory cache)
+)
+
+const (
+	nrptBase = `SOFTWARE\Policies\Microsoft\Windows NT\DNSClient\DnsPolicyConfig`
+	nrptKey  = `{B4D7E3A2-4C9F-4E2A-8F5C-000000000001}`
 )
 
 // applyDNSSinkhole starts/updates/stops the local DNS sinkhole.
@@ -66,6 +73,7 @@ func applyDNSSinkhole(domains []string, stateFile string) error {
 		m[strings.ToLower(strings.TrimSuffix(d, "."))] = struct{}{}
 	}
 	activeSink.blocked.Store(&m)
+	refreshInterfaceDNS(stateFile)
 	return nil
 }
 
@@ -250,6 +258,14 @@ func loadDNSStateFromDisk(stateFile string) *dnsPersistedState {
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil
 	}
+	// Discard state saved with wrong OEM encoding (legacy bug: netsh output
+	// was read as UTF-8 on non-English Windows, producing replacement chars).
+	for name := range s.DNS {
+		if strings.ContainsRune(name, '�') {
+			os.Remove(dnsStatePath(stateFile))
+			return nil
+		}
+	}
 	return &s
 }
 
@@ -261,38 +277,50 @@ func deleteDNSStateFromDisk(stateFile string) {
 
 // captureAndSetSystemDNS saves the current DNS configuration to disk,
 // sets 127.0.0.1 on all active interfaces, and returns the upstream address.
-// If a saved state already exists on disk (crash recovery), it is reused
-// without touching the system DNS again.
+// If a saved state already exists on disk (crash recovery), the saved upstream
+// is reused but DNS is always re-applied — the previous run may have restored
+// it or the system may have overwritten it via DHCP renewal.
 func captureAndSetSystemDNS(stateFile string) (string, error) {
-	// Crash recovery: previous run saved state but didn't restore.
+	var ifaces []string
+	var upstream string
+
 	if saved := loadDNSStateFromDisk(stateFile); saved != nil {
+		// Crash recovery: reuse the original upstream and saved DNS map so
+		// restoreSystemDNS can put things back, but re-apply 127.0.0.1 below.
 		savedDNS = saved.DNS
-		return saved.Upstream, nil
-	}
+		upstream = saved.Upstream
+		for iface := range saved.DNS {
+			ifaces = append(ifaces, iface)
+		}
+	} else {
+		var dns map[string][]string
+		ifaces, dns = getInterfaceDNS()
+		savedDNS = dns
 
-	ifaces, dns := getInterfaceDNS()
-	savedDNS = dns
-
-	upstream := "8.8.8.8:53"
-	for _, servers := range dns {
-		for _, s := range servers {
-			if s != "127.0.0.1" {
-				upstream = s + ":53"
-				goto found
+		upstream = "8.8.8.8:53"
+		for _, servers := range dns {
+			for _, s := range servers {
+				if s != "127.0.0.1" {
+					upstream = s + ":53"
+					goto found
+				}
 			}
 		}
-	}
-found:
-	// Persist before changing anything — if we crash mid-way, next run recovers.
-	if err := saveDNSStateToDisk(stateFile, upstream, dns); err != nil {
-		return "", err
+	found:
+		// Persist before changing anything — if we crash mid-way, next run recovers.
+		if err := saveDNSStateToDisk(stateFile, upstream, dns); err != nil {
+			return "", err
+		}
 	}
 
+	// Always (re-)apply 127.0.0.1, even on crash recovery — the system may
+	// have overwritten it while the agent was down.
 	for _, iface := range ifaces {
 		exec.Command("netsh", "interface", "ipv4", "set", "dnsservers",
 			iface, "static", "127.0.0.1", "primary").Run()
 	}
 	disableBrowserDoH()
+	addNRPTCatchAll() //nolint:errcheck
 	exec.Command("ipconfig", "/flushdns").Run()
 	return upstream, nil
 }
@@ -310,6 +338,7 @@ func restoreSystemDNS(stateFile string) {
 		return
 	}
 
+	removeNRPTCatchAll()
 	for iface, servers := range savedDNS {
 		if len(servers) == 0 {
 			exec.Command("netsh", "interface", "ipv4", "set", "dnsservers",
@@ -331,44 +360,106 @@ func restoreSystemDNS(stateFile string) {
 }
 
 // getInterfaceDNS returns active (non-loopback) interface names and their
-// current DNS servers by parsing `netsh interface ipv4 show dnsservers`.
+// current DNS servers.
+//
+// PowerShell's Get-DnsClientServerAddress is used instead of
+// `netsh interface ipv4 show dnsservers` because netsh outputs text in the
+// system OEM codepage (CP866 on Russian Windows), which corrupts non-ASCII
+// interface names when read as UTF-8. PowerShell always outputs Unicode.
 func getInterfaceDNS() ([]string, map[string][]string) {
-	out, err := exec.Command("netsh", "interface", "ipv4", "show", "dnsservers").Output()
+	// Each output line: "<InterfaceAlias>|<ip1>,<ip2>" (empty after | = no servers).
+	const script = `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; ` +
+		`Get-DnsClientServerAddress -AddressFamily IPv4 | ` +
+		`Where-Object { $_.InterfaceAlias -notlike '*Loopback*' } | ` +
+		`ForEach-Object { $_.InterfaceAlias + '|' + ($_.ServerAddresses -join ',') }`
+
+	out, err := exec.Command(
+		"powershell", "-NoProfile", "-NonInteractive", "-Command", script,
+	).Output()
 	if err != nil {
 		return nil, nil
 	}
 
 	var ifaces []string
 	dns := make(map[string][]string)
-	var current string
 
 	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimRight(line, "\r\n")
-
-		if strings.HasPrefix(line, "Configuration for interface") {
-			s := strings.Index(line, `"`)
-			e := strings.LastIndex(line, `"`)
-			if s >= 0 && e > s {
-				name := line[s+1 : e]
-				if !strings.Contains(strings.ToLower(name), "loopback") {
-					current = name
-					ifaces = append(ifaces, current)
-					dns[current] = nil
-				} else {
-					current = ""
-				}
-			}
+		line = strings.TrimSpace(strings.TrimRight(line, "\r"))
+		if line == "" {
 			continue
 		}
-
-		if current == "" {
+		parts := strings.SplitN(line, "|", 2)
+		if len(parts) != 2 {
 			continue
 		}
-		for _, f := range strings.Fields(line) {
-			if ip := net.ParseIP(f); ip != nil && !ip.IsLoopback() {
-				dns[current] = append(dns[current], ip.String())
+		name := parts[0]
+		if name == "" {
+			continue
+		}
+		ifaces = append(ifaces, name)
+		if parts[1] == "" {
+			dns[name] = nil
+			continue
+		}
+		var servers []string
+		for _, s := range strings.Split(parts[1], ",") {
+			s = strings.TrimSpace(s)
+			if ip := net.ParseIP(s); ip != nil && !ip.IsLoopback() {
+				servers = append(servers, ip.String())
 			}
 		}
+		dns[name] = servers
 	}
 	return ifaces, dns
+}
+
+// ── NRPT (Name Resolution Policy Table) ──────────────────────────────────────
+
+// addNRPTCatchAll installs a catch-all NRPT rule that routes all DNS queries
+// through 127.0.0.1. NRPT takes precedence over per-interface DNS settings,
+// so VPN adapters that set their own DNS server are covered automatically.
+func addNRPTCatchAll() error {
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE,
+		nrptBase+`\`+nrptKey, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("create NRPT rule: %w", err)
+	}
+	defer k.Close()
+	k.SetDWordValue("Version", 2)
+	k.SetStringsValue("Name", []string{"."})
+	k.SetStringValue("GenericDNSServers", "127.0.0.1")
+	return k.SetDWordValue("ConfigOptions", 0x8) // bit 3 = use GenericDNSServers
+}
+
+func removeNRPTCatchAll() {
+	registry.DeleteKey(registry.LOCAL_MACHINE, nrptBase+`\`+nrptKey) //nolint:errcheck
+}
+
+// refreshInterfaceDNS applies 127.0.0.1 to any interfaces that appeared after
+// the sinkhole started (e.g. a VPN adapter that connected mid-session).
+// New interfaces are added to savedDNS so they are restored on shutdown.
+// Must be called with sinkholeMu held.
+func refreshInterfaceDNS(stateFile string) {
+	if savedDNS == nil {
+		return
+	}
+	ifaces, dns := getInterfaceDNS()
+	var added bool
+	for _, iface := range ifaces {
+		if _, known := savedDNS[iface]; known {
+			continue
+		}
+		savedDNS[iface] = dns[iface]
+		exec.Command("netsh", "interface", "ipv4", "set", "dnsservers",
+			iface, "static", "127.0.0.1", "primary").Run()
+		added = true
+	}
+	if added {
+		upstream := ""
+		if activeSink != nil {
+			upstream = activeSink.upstream
+		}
+		saveDNSStateToDisk(stateFile, upstream, savedDNS) //nolint:errcheck
+		exec.Command("ipconfig", "/flushdns").Run()
+	}
 }

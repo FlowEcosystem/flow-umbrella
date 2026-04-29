@@ -4,8 +4,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
 	"golang.org/x/sys/windows/svc"
@@ -60,17 +58,10 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, s chan<- svc.S
 
 // installService registers the binary with the Windows SCM as an
 // auto-start service running as LocalSystem (SYSTEM).
-// cfgFile is currently unused on Windows — the service auto-discovers
-// config.json from the exe directory at runtime.
+// Always uses installedExePath() — the binary must be copied to Program Files
+// via copyToInstallDir() before calling this.
 func installService(_ string) error {
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("get exe path: %w", err)
-	}
-	exePath, err = filepath.Abs(exePath)
-	if err != nil {
-		return fmt.Errorf("abs path: %w", err)
-	}
+	exePath := installedExePath()
 
 	m, err := mgr.Connect()
 	if err != nil {

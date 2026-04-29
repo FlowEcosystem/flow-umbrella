@@ -1,5 +1,6 @@
 <script setup>
-import { X } from 'lucide-vue-next'
+import { X, Package, RefreshCw } from 'lucide-vue-next'
+import { releasesApi } from '@/domains/releases/api'
 
 const props = defineProps({
   open:         Boolean,
@@ -9,8 +10,48 @@ const props = defineProps({
   payload:      String,
   loading:      Boolean,
   error:        String,
+  agentOs:      { type: String, default: null }, // 'windows' | 'linux' | 'macos'
 })
 const emit = defineEmits(['update:open', 'update:type', 'update:payload', 'submit'])
+
+// ── update_self: releases picker ──────────────────────────────────────────────
+const releases        = ref([])
+const releasesLoading = ref(false)
+const selectedRelease = ref(null)
+
+watch(() => [props.open, props.type], async ([open, type]) => {
+  if (!open || type !== 'update_self') return
+  selectedRelease.value = null
+  emit('update:payload', '')
+  releasesLoading.value = true
+  try {
+    releases.value = await releasesApi.list(props.agentOs ?? undefined)
+  } catch { releases.value = [] }
+  finally   { releasesLoading.value = false }
+}, { immediate: false })
+
+watch(() => props.type, (t) => {
+  if (t !== 'update_self') {
+    selectedRelease.value = null
+    releases.value = []
+    emit('update:payload', '')
+  }
+})
+
+function selectRelease(r) {
+  selectedRelease.value = r
+  emit('update:payload', JSON.stringify({ release_id: r.id, version: r.version, checksum: r.checksum }))
+}
+
+const submitDisabled = computed(() =>
+  props.loading || (props.type === 'update_self' && !selectedRelease.value)
+)
+
+const PLATFORM_LABELS = { windows: 'Windows', linux: 'Linux', macos: 'macOS' }
+function fmtSize(bytes) {
+  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + ' МБ'
+  return (bytes / 1024).toFixed(0) + ' КБ'
+}
 </script>
 
 <template>
@@ -55,7 +96,53 @@ const emit = defineEmits(['update:open', 'update:type', 'update:payload', 'submi
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5">
+        <!-- releases picker for update_self -->
+        <template v-if="type === 'update_self'">
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">
+              Релиз <span class="text-red-400">*</span>
+            </label>
+
+            <!-- loading -->
+            <div v-if="releasesLoading" class="flex items-center justify-center gap-2 py-6 text-fg-subtle/40 text-xs">
+              <RefreshCw :size="12" class="animate-spin" />
+              Загрузка релизов...
+            </div>
+
+            <!-- empty -->
+            <div v-else-if="!releases.length"
+                 class="flex flex-col items-center gap-2 py-6 text-center rounded-lg border border-dashed border-white/[0.08]">
+              <Package :size="20" class="text-fg-subtle/30" />
+              <p class="text-xs text-fg-subtle/40">Нет доступных релизов</p>
+              <p class="text-[10px] text-fg-subtle/30">Загрузите бинарь через страницу «Релизы»</p>
+            </div>
+
+            <!-- list -->
+            <div v-else class="flex flex-col gap-1 max-h-52 overflow-y-auto">
+              <button
+                v-for="r in releases" :key="r.id"
+                @click="selectRelease(r)"
+                class="flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-all"
+                :class="selectedRelease?.id === r.id
+                  ? 'border-accent/50 bg-accent/10'
+                  : 'border-white/[0.08] hover:border-white/20 hover:bg-white/[0.03]'"
+              >
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-mono font-medium text-fg">v{{ r.version }}</span>
+                    <span class="text-[10px] text-fg-subtle/50">{{ PLATFORM_LABELS[r.platform] ?? r.platform }}</span>
+                    <span class="text-[10px] text-fg-subtle/40">{{ r.arch }}</span>
+                  </div>
+                  <span class="text-[10px] text-fg-subtle/40 font-mono truncate">{{ r.filename }}</span>
+                </div>
+                <span class="text-[10px] text-fg-subtle/40 shrink-0 ml-2">{{ fmtSize(r.file_size) }}</span>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- generic JSON payload for all other commands -->
+        <div v-else class="flex flex-col gap-1.5">
           <label class="text-[11px] font-semibold uppercase tracking-widest text-fg-subtle">
             Payload <span class="normal-case font-normal">(JSON, необязательно)</span>
           </label>
@@ -79,7 +166,7 @@ const emit = defineEmits(['update:open', 'update:type', 'update:payload', 'submi
                        hover:bg-white/[0.04] transition-colors disabled:opacity-50">
           Отмена
         </button>
-        <button @click="$emit('submit')" :disabled="loading"
+        <button @click="$emit('submit')" :disabled="submitDisabled"
                 class="h-9 px-4 rounded-md text-sm font-medium text-[#1c1917] transition-all
                        disabled:opacity-50 disabled:cursor-not-allowed"
                 style="background: linear-gradient(135deg, #c4683a, #d4785a)">

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/flow-ecosystem/umbrella-agent/internal/api"
 )
 
 // Result is the outcome of a command execution.
@@ -21,16 +23,19 @@ type Result struct {
 }
 
 // Execute runs the given command type with optional JSON payload.
-func Execute(cmdType string, payload json.RawMessage) Result {
+// client is used for update_self with server-hosted releases; nil is safe for other commands.
+func Execute(cmdType string, payload json.RawMessage, client *api.Client) Result {
 	switch cmdType {
 	case "reboot":
 		return reboot()
 	case "collect_diagnostics":
 		return collectDiagnostics()
 	case "update_self":
-		return updateSelf(payload)
+		return ExecuteUpdate(payload, client)
 	case "decommission":
 		return decommission()
+	case "kill_process":
+		return killProcess(payload)
 	case "apply_config":
 		return Result{Status: "success", Output: jsonMsg("config reloaded (noop)")}
 	default:

@@ -12,6 +12,9 @@ from umbrella_server.domains.groups.providers import GroupsProvider
 from umbrella_server.domains.policies.providers import PoliciesProvider
 from umbrella_server.domains.commands.providers import CommandsProvider
 from umbrella_server.domains.metrics.providers import MetricsProvider
+from umbrella_server.domains.processes.providers import ProcessesProvider
+from umbrella_server.domains.audit.providers import AuditProvider
+from umbrella_server.domains.releases.providers import ReleasesProvider
 
 
 def build_container() -> AsyncContainer:
@@ -26,4 +29,7 @@ def build_container() -> AsyncContainer:
         PoliciesProvider(),
         CommandsProvider(),
         MetricsProvider(),
+        ProcessesProvider(),
+        AuditProvider(),
+        ReleasesProvider(),
     )

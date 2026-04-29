@@ -19,6 +19,7 @@ from umbrella_server.domains.auth.schemas import (
     TokenResponse,
 )
 from umbrella_server.domains.auth.service import AdminService, AuthService
+from umbrella_server.domains.audit.service import AuditService
 
 
 auth_router = APIRouter(prefix="/v1/auth", tags=["auth"])
@@ -52,16 +53,23 @@ async def login(
     request: Request,
     response: Response,
     auth_service: FromDishka[AuthService],
+    audit: FromDishka[AuditService],
     settings: FromDishka[Settings],
 ) -> TokenResponse:
     user_agent, ip = get_client_meta(request)
-    _, access, raw_refresh = await auth_service.login(
+    admin, access, raw_refresh = await auth_service.login(
         email=payload.email,
         password=payload.password,
         user_agent=user_agent,
         ip_address=ip,
     )
     _set_refresh_cookie(response, raw_refresh, settings)
+    await audit.log(
+        "admin.login",
+        admin_id=admin.id,
+        admin_email=admin.email,
+        details={"ip": ip, "user_agent": user_agent},
+    )
     return TokenResponse(
         access_token=access,
         expires_in=settings.jwt_access_ttl_min * 60,

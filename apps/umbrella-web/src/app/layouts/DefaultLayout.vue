@@ -1,12 +1,13 @@
 <script setup>
 import {
   LayoutDashboard, Monitor, ShieldCheck,
-  Users, UserCircle, Settings,
-  ChevronsUpDown, Filter, RefreshCw, LogOut,
+  Users, UserCircle, Settings, ClipboardList,
+  PackageOpen, ChevronsUpDown, LogOut,
 } from 'lucide-vue-next'
 import { useAuthStore }       from '@/domains/auth/store'
 import { useSessionExpired }  from '@/shared/composables/useSessionExpired'
 import { usePermissions }     from '@/shared/composables/usePermissions'
+import { useGlobalStream }    from '@/shared/composables/useGlobalStream'
 
 const route    = useRoute()
 const router   = useRouter()
@@ -14,6 +15,8 @@ const auth     = useAuthStore()
 
 const { sessionExpired, reset: resetSession } = useSessionExpired()
 const { isSuperAdmin } = usePermissions()
+
+useGlobalStream()
 
 async function handleSessionExpiredLogin() {
   resetSession()
@@ -34,12 +37,14 @@ async function handleLogout() {
 }
 
 const allNavItems = [
-  { icon: LayoutDashboard, label: 'Обзор',      path: '/' },
-  { icon: Monitor,         label: 'Агенты',     path: '/agents' },
-  { icon: ShieldCheck,     label: 'Политики',   path: '/policies' },
-  { icon: Users,           label: 'Группы',     path: '/groups' },
-  { icon: UserCircle,      label: 'Админы',     path: '/admins', superAdminOnly: true },
-  { icon: Settings,        label: 'Настройки',  path: '/settings' },
+  { icon: LayoutDashboard, label: 'Обзор',     path: '/' },
+  { icon: Monitor,         label: 'Агенты',    path: '/agents' },
+  { icon: ShieldCheck,     label: 'Политики',  path: '/policies' },
+  { icon: Users,           label: 'Группы',    path: '/groups' },
+  { icon: ClipboardList,   label: 'Аудит',     path: '/audit' },
+  { icon: PackageOpen,     label: 'Релизы',    path: '/releases' },
+  { icon: UserCircle,      label: 'Админы',    path: '/admins', superAdminOnly: true },
+  { icon: Settings,        label: 'Настройки', path: '/settings' },
 ]
 
 const navItems = computed(() =>
@@ -51,11 +56,13 @@ const pageTitle = computed(() => {
   if (p === '/')         return 'Обзор'
   if (p === '/agents')          return 'Агенты'
   if (p.startsWith('/agents/')) return 'Агент'
+  if (p === '/audit')           return 'Аудит'
   if (p === '/policies')        return 'Политики'
   if (p === '/groups')          return 'Группы'
   if (p.startsWith('/groups/')) return 'Группа'
-  if (p === '/admins')   return 'Администраторы'
-  if (p === '/settings') return 'Настройки'
+  if (p === '/admins')    return 'Администраторы'
+  if (p === '/releases')  return 'Релизы'
+  if (p === '/settings')  return 'Настройки'
   return 'Umbrella'
 })
 </script>

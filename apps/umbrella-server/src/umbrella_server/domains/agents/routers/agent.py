@@ -18,13 +18,24 @@ from umbrella_server.domains.agents.schemas import (
     AgentRenewResponse,
 )
 from umbrella_server.domains.agents.service import AgentService
+from umbrella_server.domains.audit.service import AuditService
 from umbrella_server.pki.decommission_key import DecommissionKey
-from umbrella_server.domains.commands.schemas import AgentCommandItem, AgentCommandResultRequest
+from umbrella_server.domains.commands.schemas import AgentCommandItem, AgentCommandResultRequest, CommandRead
 from umbrella_server.domains.commands.service import CommandService
 from umbrella_server.domains.policies.schemas import AgentPolicyItem
 from umbrella_server.domains.policies.service import PolicyService
 from umbrella_server.domains.metrics.schemas import AgentMetricPush
 from umbrella_server.domains.metrics.service import MetricsService
+from umbrella_server.domains.processes.schemas import AgentProcessPush
+from umbrella_server.domains.processes.service import ProcessService
+from umbrella_server.shared.sse_broker import agent_broker, GLOBAL_KEY
+
+_DANGEROUS_PROCESSES = {
+    "xray.exe", "v2ray.exe", "sing-box.exe", "trojan.exe",
+    "shadowsocks.exe", "clash.exe", "tor.exe", "torbrowser.exe",
+    "openvpn.exe", "wireguard.exe", "ngrok.exe", "frpc.exe",
+    "proxifier.exe", "mimikatz.exe", "procdump.exe", "psexec.exe",
+}
 
 agent_router = APIRouter(prefix="/v1/agent", tags=["agent"])
 
@@ -40,6 +51,7 @@ async def enroll(
     service: FromDishka[AgentService],
     settings: FromDishka[Settings],
     decommission_key: FromDishka[DecommissionKey | None],
+    audit: FromDishka[AuditService],
 ) -> AgentEnrollResponse:
     agent, raw_token, cert_pem, ca_cert_pem = await service.enroll(
         enrollment_token=payload.enrollment_token,
@@ -49,6 +61,12 @@ async def enroll(
         os_version=payload.os_version,
         agent_version=payload.agent_version,
         ip_address=payload.ip_address,
+    )
+    await audit.log(
+        "agent.enrolled",
+        entity_type="agent",
+        entity_id=str(agent.id),
+        details={"hostname": payload.hostname, "os": payload.os, "ip": payload.ip_address},
     )
     return AgentEnrollResponse(
         agent_id=agent.id,
@@ -76,7 +94,11 @@ async def heartbeat(
         agent_version=payload.agent_version,
         ip_address=payload.ip_address,
     )
-    return AgentRead.model_validate(agent)
+    read = AgentRead.model_validate(agent)
+    data = read.model_dump()
+    await agent_broker.publish(str(agent.id), "agent", data)
+    await agent_broker.publish(GLOBAL_KEY, "agent_update", data)
+    return read
 
 
 @agent_router.post("/renew", response_model=AgentRenewResponse)
@@ -114,12 +136,15 @@ async def submit_command_result(
     agent: Annotated[Agent, Depends(current_agent)],
     command_service: FromDishka[CommandService],
 ) -> None:
-    await command_service.submit_result(
+    cmd = await command_service.submit_result(
         command_id,
         agent.id,
         status=payload.status,
         result=payload.result,
         error_message=payload.error_message,
+    )
+    await agent_broker.publish(
+        str(agent.id), "command", CommandRead.model_validate(cmd).model_dump(),
     )
 
 
@@ -154,3 +179,35 @@ async def push_metrics(
     metrics_service: FromDishka[MetricsService],
 ) -> None:
     await metrics_service.push(agent, payload)
+    await agent_broker.publish(str(agent.id), "metrics", {
+        "collected_at": payload.collected_at.isoformat(),
+        "cpu_percent": payload.cpu_percent,
+        "ram_used_mb": payload.ram_used_mb,
+        "ram_total_mb": payload.ram_total_mb,
+        "disk_used_gb": payload.disk_used_gb,
+        "disk_total_gb": payload.disk_total_gb,
+    })
+
+
+@agent_router.post("/processes", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+async def push_processes(
+    payload: AgentProcessPush,
+    agent: Annotated[Agent, Depends(current_agent)],
+    process_service: FromDishka[ProcessService],
+) -> None:
+    await process_service.push(agent, payload)
+    await agent_broker.publish(str(agent.id), "processes", {
+        "collected_at": payload.collected_at.isoformat(),
+        "processes": [p.model_dump() for p in payload.processes],
+    })
+    for proc in payload.processes:
+        if proc.name.lower() in _DANGEROUS_PROCESSES:
+            alert = {
+                "agent_id": str(agent.id),
+                "hostname": agent.hostname,
+                "process_name": proc.name,
+                "detected_at": payload.collected_at.isoformat(),
+            }
+            await agent_broker.publish(str(agent.id), "alert", alert)
+            await agent_broker.publish(GLOBAL_KEY, "alert", alert)

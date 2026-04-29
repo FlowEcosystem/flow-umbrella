@@ -11,6 +11,12 @@ export const agentsApi = {
   issueCommand:    (id, data)  => http.post(`/v1/agents/${id}/commands`, data).then(r => r.data),
   generateDecommissionToken: (id) => http.post(`/v1/agents/${id}/decommission-token`).then(r => r.data),
   getMetrics:      (id, limit = 60) => http.get(`/v1/agents/${id}/metrics`, { params: { limit } }).then(r => r.data),
+  getProcesses:        (id)         => http.get(`/v1/agents/${id}/processes`).then(r => r.data),
+  getProcessStats:     (id)         => http.get(`/v1/agents/${id}/process-stats`).then(r => r.data),
+}
+
+export const processStatsApi = {
+  getGlobal: (limit = 20) => http.get('/v1/process-stats', { params: { limit } }).then(r => r.data),
 }
 
 export const enrollmentTokensApi = {

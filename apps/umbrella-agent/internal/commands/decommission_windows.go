@@ -11,22 +11,22 @@ import (
 )
 
 func decommission() Result {
-	exe, err := os.Executable()
-	if err != nil {
-		return Result{Status: "failure", ErrMsg: "get exe path: " + err.Error()}
-	}
-	exe, _ = filepath.Abs(exe)
-	dir := filepath.Dir(exe)
+	idir := installDir()
+	ddir := dataDir()
 
-	// Script in %TEMP% so it can delete the installation directory itself.
 	batPath := filepath.Join(os.TempDir(), "umbrella-decommission.bat")
 	bat := "@echo off\r\n" +
-		"ping 127.0.0.1 -n 6 > nul\r\n" +             // ~5s for agent to exit
-		"sc stop UmbrellaAgent\r\n" +
-		"ping 127.0.0.1 -n 4 > nul\r\n" +             // ~3s for process to release exe lock
-		"sc delete UmbrellaAgent\r\n" +
-		"icacls \"" + dir + "\" /reset /T /C /Q\r\n" + // reset ACLs so rd can proceed
-		"rd /s /q \"" + dir + "\"\r\n" +
+		"ping 127.0.0.1 -n 6 > nul\r\n" + // ~5s — agent exits
+		"sc.exe stop UmbrellaAgent\r\n" +
+		"ping 127.0.0.1 -n 4 > nul\r\n" + // ~3s — process releases exe lock
+		"sc.exe delete UmbrellaAgent\r\n" +
+		// Remove install dir from system PATH via PowerShell.
+		"powershell -NoProfile -NonInteractive -Command " +
+		"\"$p=([Environment]::GetEnvironmentVariable('Path','Machine') -split ';'" +
+		" | Where-Object {$_ -notlike '*UmbrellaAgent*'}) -join ';';" +
+		"[Environment]::SetEnvironmentVariable('Path',$p,'Machine')\"\r\n" +
+		"rd /s /q \"" + idir + "\"\r\n" +
+		"rd /s /q \"" + ddir + "\"\r\n" +
 		"del /f /q \"%~f0\"\r\n"
 
 	if err := os.WriteFile(batPath, []byte(bat), 0o755); err != nil {
@@ -42,4 +42,20 @@ func decommission() Result {
 		return Result{Status: "failure", ErrMsg: fmt.Sprintf("start decommission script: %v", err)}
 	}
 	return Result{Status: "success", Output: jsonMsg("decommission script launched")}
+}
+
+func installDir() string {
+	pf := os.Getenv("ProgramFiles")
+	if pf == "" {
+		pf = `C:\Program Files`
+	}
+	return filepath.Join(pf, "UmbrellaAgent")
+}
+
+func dataDir() string {
+	pd := os.Getenv("PROGRAMDATA")
+	if pd == "" {
+		pd = `C:\ProgramData`
+	}
+	return filepath.Join(pd, "UmbrellaAgent")
 }

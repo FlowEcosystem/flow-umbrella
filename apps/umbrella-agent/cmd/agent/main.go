@@ -120,7 +120,7 @@ func doSetup(cfgFile string) {
 	waitForEnter()
 }
 
-// initLogging sets up slog to write to stdout AND the log file (if configured).
+// initLogging sets up slog to write to the log file (primary) and stdout.
 // Returns a closer for the file; call defer on it.
 func initLogging(logFile string) io.Closer {
 	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
@@ -130,7 +130,11 @@ func initLogging(logFile string) io.Closer {
 	if logFile != "" {
 		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err == nil {
 			if f, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
-				w = io.MultiWriter(os.Stdout, f)
+				// File is first: io.MultiWriter writes in order and stops on the
+				// first error. On Windows the service has a null stdout handle —
+				// writing to it fails — so file must come before stdout to ensure
+				// logs always reach the file even when stdout is unavailable.
+				w = io.MultiWriter(f, &noerrWriter{os.Stdout})
 				closer = f
 			}
 		}
@@ -138,6 +142,16 @@ func initLogging(logFile string) io.Closer {
 
 	slog.SetDefault(slog.New(slog.NewTextHandler(w, opts)))
 	return closer
+}
+
+// noerrWriter wraps a writer and always reports a successful write.
+// This prevents io.MultiWriter from aborting the chain when stdout is
+// unavailable (e.g. null handle on a Windows SCM service).
+type noerrWriter struct{ w io.Writer }
+
+func (n *noerrWriter) Write(p []byte) (int, error) {
+	n.w.Write(p) //nolint:errcheck
+	return len(p), nil
 }
 
 func doRun(cfgFile string) {
@@ -173,20 +187,35 @@ func doRun(cfgFile string) {
 }
 
 func doInstall(cfgFile string) {
-	fmt.Print("Installing service... ")
+	fmt.Print("Installing executable...    ")
+	if err := copyToInstallDir(); err != nil {
+		fmt.Println("FAILED")
+		fatalf("copy to install dir: %v", err)
+	}
+	fmt.Println("OK")
+
+	fmt.Print("Adding to system PATH...    ")
+	if err := addToSystemPath(); err != nil {
+		fmt.Printf("warning: %v\n", err)
+	} else {
+		fmt.Println("OK")
+	}
+
+	fmt.Print("Installing service...       ")
 	if err := installService(cfgFile); err != nil {
 		fmt.Println("FAILED")
 		fatalf("install service: %v", err)
 	}
 	fmt.Println("OK")
 
-	fmt.Print("Starting service...   ")
+	fmt.Print("Starting service...         ")
 	if err := startService(); err != nil {
 		fmt.Println("FAILED")
 		fatalf("start service: %v", err)
 	}
 	fmt.Println("OK")
 	fmt.Println("\nAgent is running as a background service.")
+	fmt.Println("You can now run 'umbrella-agent' from any terminal (open a new window).")
 }
 
 func doUninstall(cfgFile, offlineToken string) {
@@ -206,17 +235,33 @@ func doUninstall(cfgFile, offlineToken string) {
 		}
 	}
 
-	fmt.Print("Stopping service...    ")
+	fmt.Print("Stopping service...         ")
 	_ = stopService()
 	fmt.Println("OK")
 
-	fmt.Print("Uninstalling service... ")
+	fmt.Print("Uninstalling service...     ")
 	if err := uninstallService(); err != nil {
 		fmt.Println("FAILED")
 		fatalf("uninstall: %v", err)
 	}
 	fmt.Println("OK")
-	fmt.Println("Service removed.")
+
+	fmt.Print("Removing from PATH...       ")
+	if err := removeFromSystemPath(); err != nil {
+		fmt.Printf("warning: %v\n", err)
+	} else {
+		fmt.Println("OK")
+	}
+
+	fmt.Print("Scheduling file cleanup...  ")
+	if err := launchCleanupScript(); err != nil {
+		fmt.Printf("warning: manual cleanup required: %v\n", err)
+	} else {
+		fmt.Println("OK")
+	}
+
+	fmt.Println("\nAgent removed. Files will be deleted in a few seconds.")
+	fmt.Println("Open a new terminal window for PATH changes to take effect.")
 }
 
 func doStart() {

@@ -9,8 +9,10 @@ import AgentDetailPage  from '@/domains/agents/ui/pages/AgentDetailPage.vue'
 import PoliciesPage  from '@/domains/policies/ui/pages/PoliciesPage.vue'
 import GroupsPage       from '@/domains/groups/ui/pages/GroupsPage.vue'
 import GroupDetailPage  from '@/domains/groups/ui/pages/GroupDetailPage.vue'
-import AdminsPage    from '@/domains/admins/ui/pages/AdminsPage.vue'
-import SettingsPage  from '@/domains/settings/ui/pages/SettingsPage.vue'
+import AdminsPage      from '@/domains/admins/ui/pages/AdminsPage.vue'
+import SettingsPage    from '@/domains/settings/ui/pages/SettingsPage.vue'
+import AuditPage       from '@/domains/audit/ui/pages/AuditPage.vue'
+import ReleasesPage    from '@/domains/releases/ui/pages/ReleasesPage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -26,8 +28,10 @@ export const router = createRouter({
         { path: 'policies', component: PoliciesPage },
         { path: 'groups',        component: GroupsPage },
         { path: 'groups/:id',   component: GroupDetailPage },
-        { path: 'admins',   component: AdminsPage, meta: { superAdminOnly: true } },
-        { path: 'settings', component: SettingsPage },
+        { path: 'audit',    component: AuditPage },
+        { path: 'admins',    component: AdminsPage, meta: { superAdminOnly: true } },
+        { path: 'releases',  component: ReleasesPage },
+        { path: 'settings',  component: SettingsPage },
       ],
     },
   ],

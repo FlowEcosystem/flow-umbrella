@@ -17,6 +17,7 @@ import (
 	"github.com/flow-ecosystem/umbrella-agent/internal/enforce"
 	"github.com/flow-ecosystem/umbrella-agent/internal/metrics"
 	"github.com/flow-ecosystem/umbrella-agent/internal/pki"
+	"github.com/flow-ecosystem/umbrella-agent/internal/process"
 	"github.com/flow-ecosystem/umbrella-agent/internal/state"
 )
 
@@ -164,6 +165,7 @@ func (a *Agent) Run(done <-chan struct{}) {
 	a.doCommandPoll()
 	a.doPolicyPoll()
 	a.doMetricsPush()
+	a.doProcessesPush()
 
 	heartbeatTick := time.NewTicker(heartbeat)
 	cmdTick := time.NewTicker(cmdPoll)
@@ -190,6 +192,7 @@ func (a *Agent) Run(done <-chan struct{}) {
 			a.doPolicyPoll()
 		case <-metricsTick.C:
 			a.doMetricsPush()
+			a.doProcessesPush()
 		case <-certTick.C:
 			a.doCertCheck()
 		}
@@ -264,7 +267,7 @@ func (a *Agent) executeCommand(cmd api.Command) {
 			Result: json.RawMessage(`{"message":"agent decommissioning"}`),
 		})
 		enforce.Apply(nil, a.cfg.StateFile) // restore DNS, stop sinkhole
-		commands.Execute("decommission", nil) // launch cleanup script
+		commands.Execute("decommission", nil, nil) // launch cleanup script
 		os.Exit(0)
 		return
 	}
@@ -275,11 +278,11 @@ func (a *Agent) executeCommand(cmd api.Command) {
 			Status: "success",
 			Result: json.RawMessage(`{"message":"reboot initiated"}`),
 		})
-		commands.Execute(cmd.Type, cmd.Payload)
+		commands.Execute(cmd.Type, cmd.Payload, nil)
 		return
 	}
 
-	result := commands.Execute(cmd.Type, cmd.Payload)
+	result := commands.Execute(cmd.Type, cmd.Payload, a.client)
 
 	req := api.CommandResultRequest{
 		Status:       result.Status,
@@ -400,6 +403,33 @@ func (a *Agent) doMetricsPush() {
 		"disk_used_gb", fmt.Sprintf("%.1f", snap.DiskUsedGB),
 		"disk_total_gb", fmt.Sprintf("%.1f", snap.DiskTotalGB),
 	)
+}
+
+// ── Process push ─────────────────────────────────────────────────────────────
+
+func (a *Agent) doProcessesPush() {
+	procs, err := process.Collect()
+	if err != nil {
+		a.log.Warn("process collection failed", "err", err)
+		return
+	}
+	items := make([]api.ProcessItem, len(procs))
+	for i, p := range procs {
+		items[i] = api.ProcessItem{
+			Name:       p.Name,
+			PID:        p.PID,
+			CPUPercent: p.CPUPercent,
+			MemMB:      p.MemMB,
+		}
+	}
+	if err := a.client.PushProcesses(api.ProcessPushRequest{
+		CollectedAt: time.Now().UTC(),
+		Processes:   items,
+	}); err != nil {
+		a.log.Warn("process push failed", "err", err)
+		return
+	}
+	a.log.Info("processes pushed", "count", len(items))
 }
 
 // ── OS helpers ───────────────────────────────────────────────────────────────

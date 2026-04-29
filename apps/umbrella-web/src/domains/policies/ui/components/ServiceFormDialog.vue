@@ -15,6 +15,10 @@ const availableTypes = computed(() =>
   props.kind === 'process' ? ['process'] : ['domain', 'url', 'ip']
 )
 
+const availableTypeOptions = computed(() =>
+  availableTypes.value.map(t => ({ value: t, label: RULE_LABELS[t] }))
+)
+
 const emit = defineEmits(['update:open', 'submit'])
 
 const servicesStore = useServicesStore()
@@ -220,13 +224,12 @@ function removeRule(idx) { form.value.rules.splice(idx, 1) }
                      class="cursor-grab active:cursor-grabbing text-fg-subtle/20 hover:text-fg-subtle/50 transition-colors shrink-0 py-2 px-0.5 select-none">
                   <GripVertical :size="12" />
                 </div>
-                <select
+                <UiSelect
                   v-model="rule.type"
+                  :options="availableTypeOptions"
                   class="h-8 rounded-md border border-white/[0.08] bg-bg px-2 text-xs text-fg
-                         focus:outline-none focus:border-white/20 transition-colors shrink-0"
-                >
-                  <option v-for="t in availableTypes" :key="t" :value="t">{{ RULE_LABELS[t] }}</option>
-                </select>
+                         hover:border-white/20 shrink-0"
+                />
                 <input
                   v-model="rule.value"
                   :placeholder="rule.type === 'domain' ? 'example.com' : rule.type === 'url' ? 'https://...' : rule.type === 'process' ? 'javaw.exe' : '192.168.0.0/24'"
